@@ -4,7 +4,7 @@
   const TAU = Math.PI * 2, R = 10.5, HEAD_R = 21, TICK_MS = 50, MAX_EXTRAP_MS = 120;
   let LEAD_MS = 30000, RACE_MS = 10000, BOOT = '';
   // Donation link for the main-screen button. Leave empty to hide the button.
-  const DONATE_URL = '';
+  const DONATE_URL = 'https://buymeacoffee.com/aimstair';
   const PLAT = { ig: 'Instagram', tt: 'TikTok', x: 'X', yt: 'YouTube', tw: 'Twitch' };
   const PLAT_DOT = { ig: '#dd2a7b', tt: '#25f4ee', x: '#e7e9ea', yt: '#ff0033', tw: '#9146ff' };
   const PROFILE_URL = {
