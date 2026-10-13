@@ -9,6 +9,7 @@ const CFG = {
   LEAD_MS: 30000, // every head leads for exactly this long
   RACE_MS: 10000, // the last part of a turn is the race for next head
   SPEED: 190, TURN: 4.6, SPACING: 34, HIT: 30, SELF_SKIP: 8, // tails are ~80% of the head's size
+  TURN_HUMAN: 6.2, // players turn a bit faster than the bots (TURN)
   SOLO_MS: 30000, BUMP_COST_MS: 5000, // a head with no tail has 30s to get one; head bumps between two of them cost 5s each
   GRACE_MS: 1500, STEAL_GRACE_MS: 800,
   BOOST_MS: 3000, BOOST: 1.6, BOLT_HIT: 32,
@@ -26,6 +27,10 @@ const PLATFORMS = new Set(['ig', 'tt', 'x', 'th', 'yt', 'tw']);
 const HANDLE_RE = /^[A-Za-z0-9._-]{1,30}$/;
 const BANNED_RE = /(n[i1]gg|f[a@4]gg|r[a@4]pist|nazi|hitler|kys|cunt|whore|pedo)/i;
 const MAX_IMG_B64 = 48000;
+
+// Fail fast if a setting above is missing or mistyped (a stray comment once swallowed a few of them)
+for (const [k, v] of Object.entries(CFG)) if (!Number.isFinite(v)) throw new Error(`CFG.${k} is not a number: ${v}`);
+for (const k of ['SPACING', 'HIT', 'SELF_SKIP', 'TURN', 'TURN_HUMAN', 'SPEED', 'SOLO_MS']) if (!(k in CFG)) throw new Error(`CFG.${k} is missing`);
 
 const TAU = Math.PI * 2;
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -265,11 +270,18 @@ class Game {
     if (s.members.length > 1 && this.now - h.lastInput > CFG.AFK_MS && s.members.some(p => p !== h && this.active(p))) { this.endTurn(s, 'afk'); return; }
     if (this.now - s.leaderSince >= CFG.LEAD_MS) { this.endTurn(s, 'time'); return; }
     const r = s.race;
-    if (!r.warned && this.now >= r.goAt - CFG.GO_WARN_MS) {
+    // When the race opens, whoever is in the snake right then is in it. Anyone who arrives later
+    // (joined, stolen, captured) waits for the next round.
+    if (!r.eligible && this.now >= s.leaderSince + CFG.LEAD_MS - CFG.RACE_MS) {
+      r.eligible = new Set();
+      const msg = JSON.stringify({ t: 'raceOpen', sid: s.id, turn: s.turn });
+      for (let i = 1; i < s.members.length; i++) { const p = s.members[i]; r.eligible.add(p.pid); if (p.client) this.sendRaw(p.client, msg); }
+    }
+    if (r.eligible && !r.warned && this.now >= r.goAt - CFG.GO_WARN_MS) {
       r.warned = true;
       // The green moment goes out shortly before it happens, so everyone's pad turns green together
       const msg = JSON.stringify({ t: 'go', sid: s.id, turn: s.turn, at: r.goAt });
-      for (let i = 1; i < s.members.length; i++) { const c = s.members[i].client; if (c) this.sendRaw(c, msg); }
+      for (let i = 1; i < s.members.length; i++) { const p = s.members[i]; if (p.client && r.eligible.has(p.pid)) this.sendRaw(p.client, msg); }
     }
   }
 
@@ -292,8 +304,11 @@ class Game {
     // Humans steer; a head with no recent input (tab hidden, dropped) goes on autopilot
     if (h.bot) this.house.steer(s, h);
     else if (this.now - h.lastSteer > CFG.AUTOPILOT_MS) this.wander(h);
+    // Keys say "keep turning left/right" (or "go straight"), applied against the live angle here,
+    // so network lag can't make the client aim at where the head used to be
+    else if (h.steerMode === 'k') h.target = h.angle + h.turnDir * 2;
     let d = h.target - h.angle; d = Math.atan2(Math.sin(d), Math.cos(d));
-    const mt = CFG.TURN * dt; h.angle += Math.max(-mt, Math.min(mt, d));
+    const mt = (h.bot ? CFG.TURN : CFG.TURN_HUMAN) * dt; h.angle += Math.max(-mt, Math.min(mt, d));
     h.x += Math.cos(h.angle) * sp * dt; h.y += Math.sin(h.angle) * sp * dt;
     const r = Math.hypot(h.x, h.y);
     if (r > this.arenaR) { h.x *= this.arenaR / r; h.y *= this.arenaR / r; }
@@ -365,6 +380,7 @@ class Game {
     if (!s || s.members[0] === p || s.id !== m.sid || s.turn !== m.turn) return reply(false, { why: 'turn' });
     const r = s.race;
     if (r.entries.has(p.pid) || this.now < s.leaderSince + CFG.LEAD_MS - CFG.RACE_MS) return reply(false, { why: 'closed' });
+    if (!r.eligible || !r.eligible.has(p.pid)) return reply(false, { why: 'late' });
     const ms = Math.round(Number(m.ms));
     if (!Number.isFinite(ms)) return;
     if (ms < 0 || this.now < r.goAt - 300) { r.entries.set(p.pid, { p, ms: -1 }); return reply(false, { why: 'early' }); }
@@ -444,7 +460,12 @@ class Game {
       case 'join': return this.join(c, m);
       case 'a': {
         const p = c.player, a = Number(m.a);
-        if (p && Number.isFinite(a)) { p.target = a; p.lastSteer = this.now; }
+        if (p && Number.isFinite(a)) { p.target = a; p.steerMode = 'a'; p.lastSteer = this.now; }
+        return;
+      }
+      case 'k': {
+        const p = c.player, d = Number(m.d);
+        if (p && (d === -1 || d === 0 || d === 1)) { p.turnDir = d; p.steerMode = 'k'; p.lastSteer = this.now; }
         return;
       }
       case 'tap': return this.tap(c, m);

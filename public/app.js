@@ -12,6 +12,26 @@
     yt: h => `https://www.youtube.com/@${h}`, tw: h => `https://www.twitch.tv/${h}`,
   };
 
+  // Platform icons: a white glyph on the platform's colored tile. Used on name labels, badges and lists.
+  const GLYPH = {
+    ig: '<rect x="5" y="5" width="14" height="14" rx="4.2" fill="none" stroke="#fff" stroke-width="2"/><circle cx="12" cy="12" r="3.3" fill="none" stroke="#fff" stroke-width="2"/><circle cx="16.4" cy="7.6" r="1.15" fill="#fff"/>',
+    tt: '<path d="M13.2 4h2.6c.3 1.9 1.5 3.2 3.4 3.5v2.6c-1.3 0-2.4-.4-3.4-1.1v5.6a4.6 4.6 0 1 1-4.6-4.6c.2 0 .5 0 .7.1v2.7a2 2 0 1 0 1.3 1.8z" fill="#fff"/>',
+    x: '<path d="M6 5.5h3.6l3 4.2 3.5-4.2h2.1l-4.6 5.5 5.4 7.5h-3.6l-3.3-4.6-3.9 4.6H6.1l5-6z" fill="#fff"/>',
+    th: '<path d="M15.6 11.3c-.1-2.3-1.5-3.6-3.6-3.6-1.3 0-2.4.6-3 1.6l1.4.9c.4-.6.9-.9 1.6-.9 1 0 1.6.6 1.8 1.6-2.9-.4-5.2.5-5.2 2.6 0 1.5 1.3 2.6 3 2.6 1.6 0 2.8-.9 3.3-2.4.5.4.8 1 .8 1.8 0 1.5-1.6 3-4.6 3-3.3 0-5.3-2.2-5.3-6.1S7.8 6 11.1 6c2.6 0 4.3 1.1 5 3.3l1.6-.4C16.8 6 14.5 4.4 11.1 4.4 6.8 4.4 4.3 7.2 4.3 12.4s2.5 7.7 6.8 7.7c4 0 6.3-2.1 6.3-4.6 0-1.8-.9-3.2-1.8-4.2zm-4.4 3.9c-.9 0-1.4-.5-1.4-1.1 0-1 1.3-1.5 3.6-1.2-.2 1.4-1 2.3-2.2 2.3z" fill="#fff"/>',
+    yt: '<path d="M9.8 8.3v7.4l6.3-3.7z" fill="#fff"/>',
+    tw: '<path d="M6.5 5 5.5 7.6v9.6h3.2V19h1.8l1.8-1.8h2.6l3.6-3.6V5zm10.3 7.9-2 2h-3.2l-1.8 1.8v-1.8H7.1V6.5h9.7zm-2-4.3h-1.4v3.9h1.4zm-3.8 0H9.6v3.9H11z" fill="#fff"/>',
+  };
+  const TILE = { ig: 'url(#igg)', tt: '#0b0b0f', x: '#0b0f14', th: '#000', yt: '#ff0033', tw: '#9146ff' };
+  const iconSvg = (p, size = 16) => `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" aria-hidden="true">` +
+    (p === 'ig' ? '<defs><linearGradient id="igg" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#f58529"/><stop offset=".5" stop-color="#dd2a7b"/><stop offset="1" stop-color="#8134af"/></linearGradient></defs>' : '') +
+    `<rect width="24" height="24" rx="6.5" fill="${TILE[p] || '#555'}"/>${p === 'tt' || p === 'x' || p === 'th' ? '<rect x=".5" y=".5" width="23" height="23" rx="6" fill="none" stroke="rgba(255,255,255,.28)"/>' : ''}${GLYPH[p] || ''}</svg>`;
+  // Canvas copies of the icons (drawn as images)
+  const iconImg = {};
+  for (const p of Object.keys(GLYPH)) { const im = new Image(); im.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(iconSvg(p, 48)); iconImg[p] = im; }
+  const iconReady = p => iconImg[p] && iconImg[p].complete && iconImg[p].naturalWidth;
+  // DOM badge: icon + platform name (both from fixed constants, never user text)
+  function setPlatBadge(el, p) { el.dataset.plat = p; el.innerHTML = iconSvg(p, 14) + '<span>' + PLAT[p] + '</span>'; }
+
   const cv = document.getElementById('game'), ctx = cv.getContext('2d');
   const mini = document.getElementById('mini'), mctx = mini.getContext('2d');
   const $ = id => document.getElementById(id);
@@ -61,8 +81,6 @@
   // ---------- Profiles ----------
   const profiles = new Map();
   const setProfile = ([pid, handle, platform, img, host]) => profiles.set(pid, { pid, handle, platform, img: !!img, host: !!host, image: null });
-  // Hosts are the site's own accounts, played by the server; they're always tagged
-  const isHost = pid => !!(profiles.get(pid) || {}).host;
   const handleOf = pid => (profiles.get(pid) || {}).handle || null;
   const platOf = pid => (profiles.get(pid) || {}).platform || 'ig';
   const name = pid => pid === myPid ? 'You' : handleOf(pid) ? '@' + handleOf(pid) : 'Anonymous';
@@ -202,6 +220,7 @@
       }
       case 'ev': m.l.forEach(onEvent); break;
       case 'go': onGo(m); break;
+      case 'raceOpen': raceOk.add(keyOf(m.sid, m.turn)); break;
       case 'race': raceTop = m; break;
       case 'tapr': onTapResult(m); break;
       case 'opened':
@@ -306,22 +325,23 @@
   const cam = { x: 0, y: 0, z: 1 };
   const toScreen = (x, y) => ({ x: (x - cam.x) * cam.z + W / 2, y: (y - cam.y) * cam.z + H / 2 });
 
-  // Steering goes to the server ~15 times a second while you're the head
+  // Steering goes to the server 20 times a second while you're the head. Keys send a turn direction
+  // (the server turns from the live angle); the mouse/finger sends the angle to point at.
   setInterval(() => {
     if (!me || myIdx !== 0 || document.hidden) return;
-    let a = mine.angle;
-    if (keys.ArrowLeft || keys.a) { a -= 0.9; pointer = null; }
-    else if (keys.ArrowRight || keys.d) { a += 0.9; pointer = null; }
-    else if (pointer) {
+    if (keys.ArrowLeft || keys.a) { pointer = null; send({ t: 'k', d: -1 }); return; }
+    if (keys.ArrowRight || keys.d) { pointer = null; send({ t: 'k', d: 1 }); return; }
+    if (pointer) {
       const s = toScreen(me.x, me.y);
-      if (Math.hypot(pointer.x - s.x, pointer.y - s.y) > 8) a = Math.atan2(pointer.y - s.y, pointer.x - s.x);
+      if (Math.hypot(pointer.x - s.x, pointer.y - s.y) > 12) { send({ t: 'a', a: +Math.atan2(pointer.y - s.y, pointer.x - s.x).toFixed(3) }); return; }
     }
-    send({ t: 'a', a: +a.toFixed(3) });
-  }, 66);
+    send({ t: 'k', d: 0 }); // no input: keep going straight
+  }, 50);
 
   // ---------- Race for next head ----------
   let race = null, goInfo = null, raceTop = null, padTimer = 0, doneTimer = 0;
   const raced = new Set();
+  const raceOk = new Set(); // races we're in (we were in the snake when it opened)
   let myEntry = null; // a valid race time of ours in the current turn
   const keyOf = (sid, turn) => `${sid}:${turn}`;
   const raceLive = s => s.left <= RACE_MS;
@@ -371,7 +391,7 @@
       if (race) myEntry = { sid: race.sid };
       $('duelResult').textContent = m.rank === 1 ? "You're in first so far! The winner is announced when the turn ends 👑" : `You're #${m.rank} so far.`;
     } else {
-      $('duelResult').textContent = m.why === 'early' ? 'Too early. You can race again next turn.' : m.why === 'invalid' ? "That tap didn't count (connection hiccup). Try next turn." : 'The turn ended before your tap arrived.';
+      $('duelResult').textContent = m.why === 'early' ? 'Too early. You can race again next turn.' : m.why === 'invalid' ? "That tap didn't count (connection hiccup). Try next turn." : m.why === 'late' ? "This race started before you arrived. You're in the next one!" : 'The turn ended before your tap arrived.';
     }
     clearTimeout(doneTimer); doneTimer = setTimeout(closeRace, 1800);
   }
@@ -394,8 +414,8 @@
     $('peekAva').style.setProperty('--c', `hsl(${hueOf(best.pid)},85%,62%)`);
     $('peekAva').style.backgroundImage = url ? `url("${url}")` : '';
     $('peekAva').style.backgroundSize = url ? 'cover' : '';
-    $('peekHandle').textContent = name(best.pid) + (isHost(best.pid) ? ' ✦ host' : '');
-    $('peekPlat').hidden = !h; $('peekPlat').dataset.plat = platOf(best.pid); $('peekPlat').textContent = PLAT[platOf(best.pid)];
+    $('peekHandle').textContent = name(best.pid);
+    $('peekPlat').hidden = !h; setPlatBadge($('peekPlat'), platOf(best.pid));
     $('peekFollow').hidden = !h; $('peekFollow').dataset.plat = platOf(best.pid);
     el.hidden = false;
     el.style.left = Math.min(W - 276, Math.max(16, sx - 130)) + 'px';
@@ -650,14 +670,16 @@
     });
   };
 
-  function drawLabel(h, text, bg, fg, dot) {
+  // Name pill above a head, with the platform icon in front of the handle
+  function drawLabel(h, text, bg, fg, plat) {
     ctx.font = '800 12.5px Figtree, system-ui';
-    const w = ctx.measureText(text).width + (dot ? 26 : 16), x = h.x - w / 2, y = h.y - HEAD_R - 54;
+    const icon = plat && iconReady(plat);
+    const w = ctx.measureText(text).width + (icon ? 30 : 16), x = h.x - w / 2, y = h.y - HEAD_R - 54;
     ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.roundRect(x, y + 2, w, 22, 11); ctx.fill();
     ctx.fillStyle = bg; ctx.beginPath(); ctx.roundRect(x, y, w, 22, 11); ctx.fill();
-    if (dot) { ctx.fillStyle = dot; ctx.beginPath(); ctx.arc(x + 12, y + 11, 4, 0, TAU); ctx.fill(); }
+    if (icon) ctx.drawImage(iconImg[plat], x + 4, y + 3, 16, 16);
     ctx.fillStyle = fg; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-    ctx.fillText(text, x + (dot ? 20 : 8), y + 11.5);
+    ctx.fillText(text, x + (icon ? 24 : 8), y + 11.5);
   }
 
   const biggest = () => view.snakes.reduce((a, b) => (b.members.length > a.members.length ? b : a));
@@ -727,8 +749,8 @@
       const h = s.members[0];
       if (!inView(h.x, h.y, 160)) continue;
       const hd = handleOf(h.pid);
-      if (h.pid === myPid) drawLabel(h, hd ? `@${hd} · YOU` : 'YOU · in the spotlight', '#ffc93c', '#2a1a00');
-      else drawLabel(h, hd ? '@' + hd + (isHost(h.pid) ? ' ✦ host' : '') : 'anonymous', 'rgba(14,22,38,.92)', '#f1f6fa', hd ? PLAT_DOT[platOf(h.pid)] : null);
+      if (h.pid === myPid) drawLabel(h, hd ? `@${hd} · YOU` : 'YOU · in the spotlight', '#ffc93c', '#2a1a00', hd ? platOf(myPid) : null);
+      else drawLabel(h, hd ? '@' + hd : 'anonymous', 'rgba(14,22,38,.92)', '#f1f6fa', hd ? platOf(h.pid) : null);
     }
     if (me && myIdx > 0) {
       ctx.font = '900 11.5px Figtree, system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -802,7 +824,7 @@
   }
   function raceCheck() {
     if (race && (!mine || keyOf(mine.id, mine.turn) !== race.key) && race.state !== 'done') closeRace();
-    if (me && myIdx > 0 && raceLive(mine) && mine.left > 600 && !race && !raced.has(keyOf(mine.id, mine.turn))) openRace(mine);
+    if (me && myIdx > 0 && raceLive(mine) && mine.left > 600 && !race && raceOk.has(keyOf(mine.id, mine.turn)) && !raced.has(keyOf(mine.id, mine.turn))) openRace(mine);
   }
 
   // ---------- HUD ----------
@@ -819,9 +841,6 @@
     const humans = view ? view.humans : 0;
     $('n').textContent = humans.toLocaleString();
     $('introN').textContent = humans.toLocaleString();
-    // "humans" from the server is everyone online, hosts included; count real players separately for the wording
-    let hosts = 0; for (const p of profiles.values()) if (p.host) hosts++;
-    const real = Math.max(0, humans - hosts);
     $('introN').parentElement.lastChild.textContent = ` ${humans === 1 ? 'player is' : 'players are'} online right now`;
     $('countTail').textContent = view && view.snakes.length > 1 ? `playing · ${view.snakes.length} snakes` : 'playing';
     const st = $('status');
@@ -840,7 +859,10 @@
         st.classList.toggle('urgent', mine.members.length === 1 && !alone && left <= RACE_MS);
       } else {
         st.className = 'glass';
-        st.textContent = ranked[0] && ranked[0][0] === myPid ? `🔥 You're winning the race. You lead in ${fmt(left)}` : `You're #${myIdx + 1} of ${mine.members.length} · race ${live ? 'is LIVE' : 'starts in ' + fmt(left - RACE_MS)}`;
+        const inRace = raceOk.has(key);
+        st.textContent = ranked[0] && ranked[0][0] === myPid ? `🔥 You're winning the race. You lead in ${fmt(left)}`
+          : live && !inRace ? `You're #${myIdx + 1} of ${mine.members.length} · you're in the next race (${fmt(left)})`
+          : `You're #${myIdx + 1} of ${mine.members.length} · race ${live ? 'is LIVE' : 'starts in ' + fmt(left - RACE_MS)}`;
       }
 
       const sp = $('spot');
@@ -855,9 +877,9 @@
       $('spotAva').style.backgroundImage = url ? `url("${url}")` : '';
       $('spotAva').style.backgroundSize = url ? 'cover' : '';
       $('spotHandle').textContent = head.pid === myPid ? (hd ? '@' + hd : 'You') : name(head.pid);
-      $('spotPlat').hidden = !hd; $('spotPlat').dataset.plat = platOf(head.pid); $('spotPlat').textContent = PLAT[platOf(head.pid)];
+      $('spotPlat').hidden = !hd; if ($('spotPlat').dataset.plat !== platOf(head.pid) || !$('spotPlat').firstChild || $('spotPlat').firstChild.nodeType === 3) setPlatBadge($('spotPlat'), platOf(head.pid));
       const watching = mine.members.length - 1;
-      $('spotSub').textContent = myIdx === 0 ? (!watching ? 'Nobody behind you yet. Share the link!' : hd ? `${watching} ${watching === 1 ? 'person sees' : 'people see'} you` : 'Add a handle to get followers') : `${watching} watching${isHost(head.pid) ? ' · ✦ host' : ''}`;
+      $('spotSub').textContent = myIdx === 0 ? (!watching ? 'Nobody behind you yet. Share the link!' : hd ? `${watching} ${watching === 1 ? 'person sees' : 'people see'} you` : 'Add a handle to get followers') : `${watching} watching`;
       const f = $('spotFollow'); f.hidden = myIdx === 0 || !hd; f.dataset.plat = platOf(head.pid);
       $('spotOpens').hidden = !(myIdx === 0 && hd);
       $('spotOpensN').textContent = spot ? spot.opens : 0;
@@ -876,13 +898,13 @@
       } else {
         const li = document.createElement('li'); li.className = 'empty';
         li.textContent = mine.members.length === 1 ? 'Hit another snake’s body to steal its people. Head bumps with other lone heads cost you both 5s.'
-          : live ? (myIdx === 0 ? 'Your followers are racing…' : raced.has(key) ? 'Waiting for times…' : 'Tap here to race!') : 'Everyone races in the last 10 seconds. Fastest tap leads next.';
+          : live ? (myIdx === 0 ? 'Your followers are racing…' : !raceOk.has(key) ? "Race in progress. You're in the next one!" : raced.has(key) ? 'Waiting for times…' : 'Tap here to race!') : 'Everyone races in the last 10 seconds. Fastest tap leads next.';
         list.append(li);
       }
     } else if (online) st.hidden = true;
     const top = view.snakes.slice().sort((a, b) => b.members.length - a.members.length).slice(0, 5), max = top.length ? top[0].members.length : 1;
     $('boardList').innerHTML = top.map(s => { const c = s === mine ? '#ff5fa2' : `hsl(${snakeHue(s.id)},60%,62%)`; return `<li class="${s === mine ? 'mine' : ''}" style="--c:${c}"><span class="orb"></span><span>${s === mine ? 'Your snake' : 'Snake ' + s.id}</span><span class="n">${s.members.length}</span><span class="bar"><i style="width:${Math.round(s.members.length / max * 100)}%"></i></span></li>`; }).join('');
-    $('introNote').textContent = real ? 'Live with real people. Hosts wear a ✦.' : hosts ? 'The hosts ✦ are warming up the arena. Jump in!' : "Nobody's here yet. Join now and you lead first.";
+    $('introNote').textContent = humans ? 'Live right now. Jump in!' : "Nobody's here yet. Join now and you lead first.";
   }
 
   function toast(msg, gold) {
@@ -912,7 +934,8 @@
       const who = document.createElement('span'); who.className = 'who';
       const nm = document.createElement('div'); nm.className = 'nm'; nm.textContent = '@' + handle;
       const meta = document.createElement('div'); meta.className = 'meta';
-      meta.textContent = `${PLAT[platform]}${led ? ` · led ${led}×` : ''}${biggest > 1 ? ` · snake of ${biggest}` : ''}`;
+      meta.innerHTML = iconSvg(platform, 12); // fixed icon markup, then plain text below
+      meta.append(` ${PLAT[platform]}${led ? ` · led ${led}×` : ''}${biggest > 1 ? ` · snake of ${biggest}` : ''}`);
       who.append(nm, meta);
       const op = document.createElement('span'); op.className = 'op'; op.textContent = `👀 ${opens}`; op.title = 'profile opens today';
       li.append(rk, av, who, op);
@@ -1029,6 +1052,7 @@
   $('race').addEventListener('click', e => {
     if (e.target.closest('#share')) return;
     if (!mine || race || myIdx === 0 || !raceLive(mine)) return;
+    if (!raceOk.has(keyOf(mine.id, mine.turn))) { toast("This race started before you arrived. You're in the next one!"); return; }
     openRace(mine);
   });
 
@@ -1151,8 +1175,8 @@
       c.drawImage(avatar(myPid), 72, 1278, 48, 48);
       const t = `@${myHandle}`; fitFont(c, t, 800, 'Figtree, system-ui', 30, 280); c.fillStyle = T.ink; c.fillText(t, 134, 1303);
       const tw = c.measureText(t).width;
-      c.fillStyle = PLAT_DOT[platOf(myPid)]; c.beginPath(); c.arc(152 + tw, 1303, 7, 0, TAU); c.fill();
-      c.font = '600 24px Figtree, system-ui'; c.fillStyle = T.muted; c.fillText(PLAT[platOf(myPid)], 168 + tw, 1304);
+      if (iconReady(platOf(myPid))) c.drawImage(iconImg[platOf(myPid)], 144 + tw, 1290, 26, 26);
+      c.font = '600 24px Figtree, system-ui'; c.fillStyle = T.muted; c.fillText(PLAT[platOf(myPid)], 178 + tw, 1304);
     } else {
       c.font = `italic 400 40px ${SERIF}`; c.fillStyle = T.ink; c.fillText('pls follow me', 72, 1302);
     }
