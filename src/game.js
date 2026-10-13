@@ -2,6 +2,7 @@
 // Authoritative simulation for plsfollow.me. One room, one loop, everyone gets the same state buffer.
 const crypto = require('crypto');
 const { Fame } = require('./fame');
+const { House } = require('./house');
 
 const CFG = {
   TICK_MS: 50,
@@ -19,8 +20,9 @@ const CFG = {
   TROLL_HEAD_HIT: 36, TROLL_BODY_HIT: 31, TROLL_COOL_MS: 4000, TROLL_TIME_COST_MS: 5000,
   AUTOPILOT_MS: 1000, AFK_MS: 8000,
   MIN_REACTION_MS: 120, GO_WARN_MS: 1200,
+  SOLO_SPAWN_CHANCE: 0.1, // a new player sometimes starts as their own lone head instead of joining a tail
 };
-const PLATFORMS = new Set(['ig', 'tt', 'x', 'yt', 'tw']);
+const PLATFORMS = new Set(['ig', 'tt', 'x', 'th', 'yt', 'tw']);
 const HANDLE_RE = /^[A-Za-z0-9._-]{1,30}$/;
 const BANNED_RE = /(n[i1]gg|f[a@4]gg|r[a@4]pist|nazi|hitler|kys|cunt|whore|pedo)/i;
 const MAX_IMG_B64 = 48000;
@@ -44,6 +46,7 @@ class Game {
     this.arenaR = this.radiusFor(0);
     this.perf = { sum: 0, n: 0, max: 0, avg: 0, peak: 0 };
     this.fame = new Fame(process.env.DATA_DIR);
+    this.house = new House(this);
     this.fameSent = -1;
     this.fameTimer = setInterval(() => this.flushFame(), 5000);
     this.timer = setInterval(() => this.tick(), CFG.TICK_MS);
@@ -74,7 +77,7 @@ class Game {
     h.target = h.angle;
     s.leaderSince = this.now; s.boostUntil = 0; s.turn = (s.turn + 1) & 255;
     // Leading real people counts toward the hall of fame
-    if (h.handle && s.members.length > 1) this.fame.led(h.handle, h.platform, s.members.length);
+    if (h.handle && !h.bot && s.members.length > 1) this.fame.led(h.handle, h.platform, s.members.length);
     s.race = { entries: new Map(), goAt: this.now + CFG.LEAD_MS - CFG.RACE_MS + rand(1500, 5500), warned: false, dirty: false };
   }
 
@@ -100,7 +103,7 @@ class Game {
 
   removePlayer(p) {
     this.players.delete(p.pid);
-    this.humans--;
+    if (!p.bot) this.humans--;
     const s = this.snakeOf(p); if (!s) return;
     const i = s.members.indexOf(p);
     s.members.splice(i, 1);
@@ -235,6 +238,7 @@ class Game {
     const prev = this.now; this.now = Date.now();
     const dt = Math.min(0.1, Math.max(0, (this.now - prev) / 1000));
     this.balanceTrolls();
+    this.house.tick();
     let segs = 0; for (const s of this.snakes) segs += s.members.length;
     this.arenaR += (this.radiusFor(segs) - this.arenaR) * 0.01;
     const wantBolts = Math.min(30, 6 + Math.floor(Math.sqrt(segs)));
@@ -286,7 +290,8 @@ class Game {
   move(s, dt) {
     const m = s.members, h = m[0], sp = CFG.SPEED * (this.now < s.boostUntil ? CFG.BOOST : 1);
     // Humans steer; a head with no recent input (tab hidden, dropped) goes on autopilot
-    if (this.now - h.lastSteer > CFG.AUTOPILOT_MS) this.wander(h);
+    if (h.bot) this.house.steer(s, h);
+    else if (this.now - h.lastSteer > CFG.AUTOPILOT_MS) this.wander(h);
     let d = h.target - h.angle; d = Math.atan2(Math.sin(d), Math.cos(d));
     const mt = CFG.TURN * dt; h.angle += Math.max(-mt, Math.min(mt, d));
     h.x += Math.cos(h.angle) * sp * dt; h.y += Math.sin(h.angle) * sp * dt;
@@ -455,6 +460,7 @@ class Game {
     if (c.player) return;
     let handle = typeof m.handle === 'string' ? m.handle.trim().replace(/^@+/, '') : '';
     if (handle && (!HANDLE_RE.test(handle) || BANNED_RE.test(handle))) return this.send(c, { t: 'err', msg: "That handle can't be used. Letters, numbers, . _ and - only." });
+    if (this.house.isReserved(handle)) return this.send(c, { t: 'err', msg: `@${handle} is one of the hosts. Please use your own handle.` });
     const platform = PLATFORMS.has(m.platform) ? m.platform : 'ig';
     let img = null;
     if (typeof m.img === 'string' && m.img.length <= MAX_IMG_B64) {
@@ -473,7 +479,8 @@ class Game {
     this.players.set(p.pid, p); this.humans++;
     c.player = p;
     // New people join the tail of the biggest snake. Nobody here yet: you start your own and lead it.
-    const s = friendSnake || this.biggest();
+    // Usually the tail of the biggest snake; sometimes (and always if there's nobody) a fresh lone head
+    const s = friendSnake || (Math.random() < CFG.SOLO_SPAWN_CHANCE ? null : this.biggest());
     if (s) { const t = s.members[s.members.length - 1]; p.x = t.x + rand(-2, 2); p.y = t.y + rand(-2, 2); s.members.push(p); }
     else { const at = this.safeSpot(); this.spawnLine([p], at.x, at.y, Math.atan2(-at.y, -at.x)); }
     p.lastSteer = this.now; // a fresh head keeps going straight until the first steering message
@@ -497,7 +504,7 @@ class Game {
     if (!c.player || !p || !p.handle || p === c.player || c.opened.has(p.pid)) return;
     c.opened.add(p.pid); // one count per viewer per profile
     if (p.client) this.send(p.client, { t: 'opened', n: 1 });
-    this.fame.open(p.handle, p.platform, c.ip);
+    if (!p.bot) this.fame.open(p.handle, p.platform, c.ip);
   }
 
   // Someone tapped a profile on the hall of fame list
@@ -518,7 +525,8 @@ class Game {
     this.fame.save();
   }
 
-  profileRow(p) { return [p.pid, p.handle, p.platform, p.img ? 1 : 0]; }
+  hostCount() { let n = 0; for (const sl of this.house.slots) if (sl.player) n++; return n; }
+  profileRow(p) { return [p.pid, p.handle, p.platform, p.img ? 1 : 0, p.bot ? 1 : 0]; }
   avatarOf(pid) { const p = this.players.get(pid); return p && p.img; }
 
   event(e) { this.events.push(e); }
@@ -537,7 +545,7 @@ class Game {
   }
 
   // Binary state, little-endian:
-  //   u8 type=1 | f64 serverTime | u16 arenaR | u16 humans | u8 boltCount | (i16 x, i16 y)*bolts
+  //   u8 type=1 | f64 serverTime | u16 arenaR | u16 online (players + hosts) | u8 boltCount | (i16 x, i16 y)*bolts
   //   u8 trollCount | (i16 x, i16 y, u8 angle(0-255), u8 flags(bit0 cooling))*trolls | u16 snakeCount
   //   per snake: u16 id | u16 len | u16 leadLeft(10ms units) | u8 flags(bit0 boost) | u8 turn | i16 angle*5000
   //   per seg:   i16 x | i16 y | u32 pid
@@ -549,7 +557,7 @@ class Game {
     const i16 = v => Math.max(-32768, Math.min(32767, Math.round(v)));
     let o = 0;
     o = buf.writeUInt8(1, o); o = buf.writeDoubleLE(this.now, o);
-    o = buf.writeUInt16LE(Math.min(65535, Math.round(this.arenaR)), o); o = buf.writeUInt16LE(Math.min(65535, this.humans), o);
+    o = buf.writeUInt16LE(Math.min(65535, Math.round(this.arenaR)), o); o = buf.writeUInt16LE(Math.min(65535, this.humans + this.hostCount()), o); // online count includes the hosts
     o = buf.writeUInt8(nb, o);
     for (let i = 0; i < nb; i++) { o = buf.writeInt16LE(i16(this.bolts[i].x), o); o = buf.writeInt16LE(i16(this.bolts[i].y), o); }
     o = buf.writeUInt8(nt, o);
@@ -572,7 +580,7 @@ class Game {
   }
 
   health() {
-    return { ok: true, humans: this.humans, trolls: this.trolls.length, snakes: this.snakes.length, clients: this.clients.size, tickAvgMs: +this.perf.avg.toFixed(2), tickPeakMs: +this.perf.peak.toFixed(2) };
+    return { ok: true, humans: this.humans, hosts: this.hostCount(), trolls: this.trolls.length, snakes: this.snakes.length, clients: this.clients.size, tickAvgMs: +this.perf.avg.toFixed(2), tickPeakMs: +this.perf.peak.toFixed(2) };
   }
 
   stop() { clearInterval(this.timer); clearInterval(this.pinger); clearInterval(this.fameTimer); this.fame.dirty = true; this.fame.save(); }

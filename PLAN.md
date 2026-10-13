@@ -24,6 +24,8 @@ right away, and produce moments worth screenshotting and sharing.
 | No tail | A head with no tail has 30s to get one (steal from a body, or get captured into a bigger snake). The clock pauses while nobody else is in the arena. Out of time: game over, unless another player bumped you since you went solo, in which case you join that player's tail. |
 | Grace | A snake that just split or stole cannot collide for 1–1.5s. This prevents chain reactions. |
 | Arena | A circle whose radius grows with player count (`700 + 30·√N`). Heads slide along the wall. |
+| Hosts | The site's own accounts (@ericmar.g on Threads; @maisoncarte_official + @clipit_app on TikTok, sharing a snake) are played by the server: they roam, chase boosts, dodge trolls, steal, and sometimes fight each other. Tagged ✦ host, counted as online, kept off the hall of fame, handles reserved. Knocked out → back in 8s. |
+| Join | 10% of new players start as a lone head instead of joining the biggest snake's tail. |
 | Trolls | Every snake segment is a real person. Five purple 👹 trolls wander the map at random, keeping far apart from each other. They don't chase anyone. A troll touching a head costs that leader 5 seconds of their turn. A troll touching a body breaks the snake there, and everyone behind becomes a new snake. After a hit a troll is harmless for 4s. A head with no tail that touches a troll is knocked out. |
 
 **What a new visitor sees:** if nobody else is playing, they start their own snake and lead it

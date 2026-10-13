@@ -5,10 +5,10 @@
   let LEAD_MS = 30000, RACE_MS = 10000, BOOT = '';
   // Donation link for the main-screen button. Leave empty to hide the button.
   const DONATE_URL = 'https://buymeacoffee.com/aimstair';
-  const PLAT = { ig: 'Instagram', tt: 'TikTok', x: 'X', yt: 'YouTube', tw: 'Twitch' };
-  const PLAT_DOT = { ig: '#dd2a7b', tt: '#25f4ee', x: '#e7e9ea', yt: '#ff0033', tw: '#9146ff' };
+  const PLAT = { ig: 'Instagram', tt: 'TikTok', x: 'X', th: 'Threads', yt: 'YouTube', tw: 'Twitch' };
+  const PLAT_DOT = { ig: '#dd2a7b', tt: '#25f4ee', x: '#e7e9ea', th: '#fafafa', yt: '#ff0033', tw: '#9146ff' };
   const PROFILE_URL = {
-    ig: h => `https://www.instagram.com/${h}/`, tt: h => `https://www.tiktok.com/@${h}`, x: h => `https://x.com/${h}`,
+    ig: h => `https://www.instagram.com/${h}/`, tt: h => `https://www.tiktok.com/@${h}`, x: h => `https://x.com/${h}`, th: h => `https://www.threads.com/@${h}`,
     yt: h => `https://www.youtube.com/@${h}`, tw: h => `https://www.twitch.tv/${h}`,
   };
 
@@ -60,7 +60,9 @@
 
   // ---------- Profiles ----------
   const profiles = new Map();
-  const setProfile = ([pid, handle, platform, img]) => profiles.set(pid, { pid, handle, platform, img: !!img, image: null });
+  const setProfile = ([pid, handle, platform, img, host]) => profiles.set(pid, { pid, handle, platform, img: !!img, host: !!host, image: null });
+  // Hosts are the site's own accounts, played by the server; they're always tagged
+  const isHost = pid => !!(profiles.get(pid) || {}).host;
   const handleOf = pid => (profiles.get(pid) || {}).handle || null;
   const platOf = pid => (profiles.get(pid) || {}).platform || 'ig';
   const name = pid => pid === myPid ? 'You' : handleOf(pid) ? '@' + handleOf(pid) : 'Anonymous';
@@ -392,7 +394,7 @@
     $('peekAva').style.setProperty('--c', `hsl(${hueOf(best.pid)},85%,62%)`);
     $('peekAva').style.backgroundImage = url ? `url("${url}")` : '';
     $('peekAva').style.backgroundSize = url ? 'cover' : '';
-    $('peekHandle').textContent = name(best.pid);
+    $('peekHandle').textContent = name(best.pid) + (isHost(best.pid) ? ' ✦ host' : '');
     $('peekPlat').hidden = !h; $('peekPlat').dataset.plat = platOf(best.pid); $('peekPlat').textContent = PLAT[platOf(best.pid)];
     $('peekFollow').hidden = !h; $('peekFollow').dataset.plat = platOf(best.pid);
     el.hidden = false;
@@ -725,7 +727,7 @@
       if (!inView(h.x, h.y, 160)) continue;
       const hd = handleOf(h.pid);
       if (h.pid === myPid) drawLabel(h, hd ? `@${hd} · YOU` : 'YOU · in the spotlight', '#ffc93c', '#2a1a00');
-      else drawLabel(h, hd ? '@' + hd : 'anonymous', 'rgba(14,22,38,.92)', '#f1f6fa', hd ? PLAT_DOT[platOf(h.pid)] : null);
+      else drawLabel(h, hd ? '@' + hd + (isHost(h.pid) ? ' ✦ host' : '') : 'anonymous', 'rgba(14,22,38,.92)', '#f1f6fa', hd ? PLAT_DOT[platOf(h.pid)] : null);
     }
     if (me && myIdx > 0) {
       ctx.font = '900 11.5px Figtree, system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -816,7 +818,10 @@
     const humans = view ? view.humans : 0;
     $('n').textContent = humans.toLocaleString();
     $('introN').textContent = humans.toLocaleString();
-    $('introN').parentElement.lastChild.textContent = humans ? ` ${humans === 1 ? 'stranger is' : 'strangers are'} in the snake right now` : ' strangers here. Be the first!';
+    // "humans" from the server is everyone online, hosts included; count real players separately for the wording
+    let hosts = 0; for (const p of profiles.values()) if (p.host) hosts++;
+    const real = Math.max(0, humans - hosts);
+    $('introN').parentElement.lastChild.textContent = ` ${humans === 1 ? 'player is' : 'players are'} online right now`;
     $('countTail').textContent = view && view.snakes.length > 1 ? `playing · ${view.snakes.length} snakes` : 'playing';
     const st = $('status');
     if (!online) { st.hidden = false; st.className = 'glass offline'; st.textContent = 'Reconnecting…'; }
@@ -851,7 +856,7 @@
       $('spotHandle').textContent = head.pid === myPid ? (hd ? '@' + hd : 'You') : name(head.pid);
       $('spotPlat').hidden = !hd; $('spotPlat').dataset.plat = platOf(head.pid); $('spotPlat').textContent = PLAT[platOf(head.pid)];
       const watching = mine.members.length - 1;
-      $('spotSub').textContent = myIdx === 0 ? (!watching ? 'Nobody behind you yet. Share the link!' : hd ? `${watching} ${watching === 1 ? 'person sees' : 'people see'} you` : 'Add a handle to get followers') : `${watching} watching`;
+      $('spotSub').textContent = myIdx === 0 ? (!watching ? 'Nobody behind you yet. Share the link!' : hd ? `${watching} ${watching === 1 ? 'person sees' : 'people see'} you` : 'Add a handle to get followers') : `${watching} watching${isHost(head.pid) ? ' · ✦ host' : ''}`;
       const f = $('spotFollow'); f.hidden = myIdx === 0 || !hd; f.dataset.plat = platOf(head.pid);
       $('spotOpens').hidden = !(myIdx === 0 && hd);
       $('spotOpensN').textContent = spot ? spot.opens : 0;
@@ -876,7 +881,7 @@
     } else if (online) st.hidden = true;
     const top = view.snakes.slice().sort((a, b) => b.members.length - a.members.length).slice(0, 5), max = top.length ? top[0].members.length : 1;
     $('boardList').innerHTML = top.map(s => { const c = s === mine ? '#ff5fa2' : `hsl(${snakeHue(s.id)},60%,62%)`; return `<li class="${s === mine ? 'mine' : ''}" style="--c:${c}"><span class="orb"></span><span>${s === mine ? 'Your snake' : 'Snake ' + s.id}</span><span class="n">${s.members.length}</span><span class="bar"><i style="width:${Math.round(s.members.length / max * 100)}%"></i></span></li>`; }).join('');
-    $('introNote').textContent = humans ? 'Every segment is a real person, live.' : "Nobody's here yet. Join now and you lead first.";
+    $('introNote').textContent = real ? 'Live with real people. Hosts wear a ✦.' : hosts ? 'The hosts ✦ are warming up the arena. Jump in!' : "Nobody's here yet. Join now and you lead first.";
   }
 
   function toast(msg, gold) {

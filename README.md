@@ -30,6 +30,7 @@ It prints messages received, race taps accepted/rejected, and the server's tick 
 | Path | What it is |
 |---|---|
 | `server.js` | HTTP static files, `/healthz`, avatar images at `/a/<boot>/<pid>`, WebSocket at `/ws` |
+| `src/house.js` | Host accounts played by the server (edit `GROUPS` at the top to change them) |
 | `src/fame.js` | Today's spotlight hall of fame (most-opened profiles), saved to `DATA_DIR` |
 | `src/game.js` | Authoritative 20 Hz simulation: snakes, turns, races, steals, bites, trolls, binary state encoding |
 | `public/index.html` | Markup and styles |
