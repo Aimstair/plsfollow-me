@@ -9,9 +9,10 @@ const CFG = {
   SPEED: 190, TURN: 4.6, SPACING: 21, HIT: 22, SELF_SKIP: 10,
   GRACE_MS: 1500, STEAL_GRACE_MS: 800,
   BOOST_MS: 3000, BOOST: 1.6, BOLT_HIT: 28,
-  // Three trolls wander the map at random, keeping far apart. Head bump: the leader loses time.
+  // Five trolls wander the map at random, keeping far apart. Head bump: the leader loses time.
   // Body hit: the snake breaks. A head with no tail gets knocked out.
-  TROLL_COUNT: 3, TROLL_APART: 0.8, // keep at least this fraction of the arena radius between trolls
+  TROLL_COUNT: 5, TROLL_APART: 0.6, // keep at least this fraction of the arena radius between trolls
+  CHAT_MAX: 80, CHAT_GAP_MS: 1200,
   TROLL_SPEED: 90, TROLL_TURN: 2,
   TROLL_HEAD_HIT: 34, TROLL_BODY_HIT: 26, TROLL_COOL_MS: 4000, TROLL_TIME_COST_MS: 5000,
   AUTOPILOT_MS: 1000, AFK_MS: 8000,
@@ -387,6 +388,7 @@ class Game {
       }
       case 'tap': return this.tap(c, m);
       case 'open': return this.open(c, m);
+      case 'chat': return this.chat(c, m);
       case 'sync': return this.send(c, { t: 'sync', c: Number(m.c) || 0, s: Date.now() });
       default: return; // 'hb' and unknown messages only count as activity
     }
@@ -412,6 +414,17 @@ class Game {
     p.lastSteer = this.now; // a fresh head keeps going straight until the first steering message
     this.send(c, { t: 'you', pid: p.pid });
     this.broadcastJson({ t: 'prof', l: [this.profileRow(p)] });
+  }
+
+  chat(c, m) {
+    const p = c.player;
+    if (!p || typeof m.text !== 'string' || this.now - (c.lastChat || 0) < CFG.CHAT_GAP_MS) return;
+    // Printable text only, one line, trimmed; banned words are starred out
+    let text = m.text.replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, '').replace(/\s+/g, ' ').trim().slice(0, CFG.CHAT_MAX);
+    if (!text) return;
+    text = text.replace(new RegExp(BANNED_RE.source, 'gi'), w => '*'.repeat(w.length));
+    c.lastChat = this.now;
+    this.broadcastJson({ t: 'chat', pid: p.pid, text });
   }
 
   open(c, m) {

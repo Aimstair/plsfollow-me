@@ -216,10 +216,10 @@ input, select { font: inherit; font-size: 16px; color: var(--ink); background: r
 </style>
 <style>
 [hidden] { display: none !important; }
-#donate { position: absolute; top: calc(16px + env(safe-area-inset-top, 0px)); right: 16px; z-index: 1; display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 999px; font: 800 14px var(--body); color: var(--ink); text-decoration: none; border: 1px solid rgba(255, 95, 162, .45); box-shadow: 0 0 0 0 rgba(255, 95, 162, .5), 0 8px 24px rgba(0, 0, 0, .35); transition: transform .15s, border-color .15s; animation: donatePulse 2.8s ease-in-out infinite; }
+#donate { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px 0 13px; border-radius: 999px; font: 800 14px var(--body); color: var(--ink); text-decoration: none; border: 1px solid rgba(255, 95, 162, .45); box-shadow: 0 0 0 0 rgba(255, 95, 162, .5), 0 8px 24px rgba(0, 0, 0, .35); transition: transform .15s, border-color .15s; animation: donatePulse 2.8s ease-in-out infinite; }
 #donate:hover, #donate:focus-visible { transform: translateY(-1px); border-color: var(--you); }
 @keyframes donatePulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255, 95, 162, .35), 0 8px 24px rgba(0, 0, 0, .35); } 50% { box-shadow: 0 0 0 8px rgba(255, 95, 162, 0), 0 8px 24px rgba(0, 0, 0, .35); } }
-@media (max-width: 640px) { #donate { top: calc(12px + env(safe-area-inset-top, 0px)); right: 12px; padding: 8px 12px; font-size: 13px; } }
+
 @media (prefers-reduced-motion: reduce) { #donate { animation: none; } }
 #audioCtl { position: fixed; z-index: 8; left: 16px; top: calc(62px + env(safe-area-inset-top, 0px)); display: flex; gap: 8px; }
 .abtn { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; padding: 0; cursor: pointer; color: var(--ink); border: 1px solid var(--line); position: relative; transition: transform .15s, color .15s, border-color .15s; }
@@ -228,7 +228,18 @@ input, select { font: inherit; font-size: 16px; color: var(--ink); background: r
 .abtn[aria-pressed="false"] { color: var(--muted); }
 .abtn[aria-pressed="false"] .wave { display: none; }
 .abtn[aria-pressed="false"]::after { content: ""; position: absolute; width: 22px; height: 2.5px; border-radius: 2px; background: #ff5f7e; transform: rotate(-45deg); }
-@media (max-width: 640px) { #audioCtl { top: calc(12px + env(safe-area-inset-top, 0px)); left: 12px; } .abtn { width: 36px; height: 36px; } }
+#chatBar { position: fixed; z-index: 9; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); width: min(480px, calc(100% - 24px)); display: flex; gap: 8px; padding: 8px; border-radius: 18px; }
+#chatIn { flex: 1; min-width: 0; font: 600 16px var(--body); color: var(--ink); background: rgba(7, 13, 24, .85); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; user-select: text; -webkit-user-select: text; }
+#chatIn:focus { outline: 2px solid var(--you); outline-offset: 1px; }
+/* Phones: controls become a column on the left, below the top pills; the coffee button turns into an icon */
+@media (max-width: 640px) {
+  #audioCtl { top: calc(12px + env(safe-area-inset-top, 0px)); left: 12px; }
+  #audioCtl.ingame { top: calc(104px + env(safe-area-inset-top, 0px)); flex-direction: column; }
+  .abtn, #donate { width: 38px; height: 38px; }
+  #donate { padding: 0; justify-content: center; font-size: 17px; }
+  #donate .dl { display: none; }
+  #toasts { width: calc(100% - 128px); }
+}
 #joinErr { margin: 0; color: #ff8fa3; font-weight: 700; font-size: 14px; }
 #status.offline { background: rgba(120, 30, 50, .85); }
 </style>
@@ -295,13 +306,19 @@ input, select { font: inherit; font-size: 16px; color: var(--ink); background: r
 
 <canvas class="hud glass" id="mini" width="280" height="280" aria-label="Minimap"></canvas>
 
-<div id="audioCtl" role="group" aria-label="Audio">
+<div id="audioCtl" role="group" aria-label="Sound, chat and support">
   <button class="abtn glass" id="musicBtn" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V5l11-2v13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6" cy="18" r="3" fill="currentColor"/><circle cx="17" cy="16" r="3" fill="currentColor"/></svg></button>
   <button class="abtn glass" id="sfxBtn" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path class="wave" d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+  <button class="abtn glass" id="chatBtn" title="Chat (Enter)" aria-label="Chat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 4v-4h0A1.5 1.5 0 0 1 4 14.5z" fill="currentColor"/></svg></button>
+  <a id="donate" class="glass" href="#" target="_blank" rel="noopener" hidden><span aria-hidden="true">☕</span><span class="dl">Buy me a coffee</span></a>
 </div>
 
+<form id="chatBar" class="glass" hidden autocomplete="off">
+  <input id="chatIn" maxlength="80" placeholder="Say something to the snake…" aria-label="Chat message" enterkeyhint="send">
+  <button class="cta sm" type="submit">Send</button>
+</form>
+
 <div id="intro">
-  <a id="donate" class="glass" href="#" target="_blank" rel="noopener" hidden><span aria-hidden="true">☕</span> Buy me a coffee</a>
   <div class="wrap">
     <span class="beads" aria-hidden="true"><i style="--c:#ff5fa2;--d:0"></i><i style="--c:#ffc93c;--d:1"></i><i style="--c:#34d399;--d:2"></i><i style="--c:#7dd3fc;--d:3"></i><i style="--c:#a78bfa;--d:4"></i><i style="--c:#fb923c;--d:5"></i><i style="--c:#f472b6;--d:6"></i></span>
     <h1>pls follow <span>me</span></h1>

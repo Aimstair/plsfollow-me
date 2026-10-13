@@ -179,6 +179,7 @@ window.PFAudio = (() => {
     out: t => { [67, 66, 65].forEach((n, i) => tone(mtof(n - 12), t + i * 0.28, { type: 'sawtooth', dur: 0.32, gain: 0.18, filter: 900 })); tone(mtof(52), t + 0.84, { type: 'sawtooth', dur: 0.9, gain: 0.19, to: mtof(47), filter: 800 }); },
     opened: t => { tone(1320, t, { dur: 0.5, gain: 0.13, verb: 0.35 }); tone(1980, t + 0.07, { dur: 0.6, gain: 0.09, verb: 0.35 }); },
     turn: t => { tone(mtof(76), t, { dur: 0.35, gain: 0.1, verb: 0.3 }); tone(mtof(83), t + 0.1, { dur: 0.45, gain: 0.08, verb: 0.3 }); },
+    chat: t => { tone(780, t, { type: 'sine', dur: 0.09, gain: 0.12, to: 1150, verb: 0.1 }); },
     click: t => tone(900, t, { type: 'triangle', dur: 0.04, gain: 0.12, verb: 0 }),
   };
   const lastPlayed = {};

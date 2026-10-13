@@ -184,7 +184,8 @@
     switch (m.t) {
       case 'hello': BOOT = m.boot; LEAD_MS = m.cfg.LEAD_MS; RACE_MS = m.cfg.RACE_MS; profiles.clear(); cache.clear(); break;
       case 'prof': m.l.forEach(setProfile); break;
-      case 'bye': profiles.delete(m.pid); break;
+      case 'bye': profiles.delete(m.pid); bubbles.delete(m.pid); break;
+      case 'chat': onChat(m); break;
       case 'you': myPid = m.pid; onJoined(); break;
       case 'out': knockedOut(m.why); break;
       case 'err': joinInfo = null; $('intro').hidden = false; $('bottom').hidden = true; $('joinErr').textContent = m.msg; $('joinErr').hidden = false; $('joinBtn').disabled = false; break;
@@ -280,7 +281,13 @@
     pointer = { x: e.clientX, y: e.clientY };
     if (!mine || myIdx !== 0) peekAt(e.clientX, e.clientY);
   });
-  addEventListener('keydown', e => { keys[e.key] = true; if (race && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); padPress(); } });
+  const typing = e => e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT');
+  addEventListener('keydown', e => {
+    if (typing(e)) return;
+    keys[e.key] = true;
+    if (race && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); padPress(); return; }
+    if (e.key === 'Enter' && myPid && $('intro').hidden && $('shareModal').hidden) { e.preventDefault(); openChat(); }
+  });
   addEventListener('keyup', e => { keys[e.key] = false; });
 
   const cam = { x: 0, y: 0, z: 1 };
@@ -388,6 +395,86 @@
   }
   $('peekFollow').addEventListener('click', () => follow(peekFor));
   $('spotFollow').addEventListener('click', e => { e.stopPropagation(); if (mine) follow(mine.members[0].pid); });
+
+  // ---------- Chat ----------
+  // Messages show as speech bubbles above the sender's segment for a few seconds
+  const bubbles = new Map();
+  function onChat(m) {
+    bubbles.set(m.pid, { text: m.text, at: now, until: now + Math.min(8000, 3500 + m.text.length * 60) });
+    if (view) for (const s of view.snakes) for (const p of s.members) if (p.pid === m.pid) { const q = toScreen(p.x, p.y); if (q.x > 0 && q.y > 0 && q.x < W && q.y < H) sfx('chat'); return; }
+  }
+  function openChat() {
+    if (!myPid) return;
+    $('chatBar').hidden = false; $('chatIn').value = ''; $('chatIn').focus();
+  }
+  function closeChat() { $('chatBar').hidden = true; $('chatIn').blur(); for (const k in keys) keys[k] = false; }
+  $('chatBar').addEventListener('submit', e => {
+    e.preventDefault();
+    const text = $('chatIn').value.trim();
+    if (text) send({ t: 'chat', text });
+    closeChat();
+  });
+  $('chatIn').addEventListener('keydown', e => { if (e.key === 'Escape') closeChat(); });
+  $('chatIn').addEventListener('blur', () => setTimeout(() => { if (!$('chatIn').value.trim()) $('chatBar').hidden = true; }, 150));
+  $('chatBtn').addEventListener('click', () => { if (!$('chatBar').hidden) closeChat(); else if (myPid) openChat(); else toast('Join the snake to chat'); });
+
+  function wrapLines(text, maxW, maxLines) {
+    const words = text.split(' '), lines = [];
+    let line = '';
+    for (const w of words) {
+      const t = line ? line + ' ' + w : w;
+      if (ctx.measureText(t).width <= maxW || !line) line = t; else { lines.push(line); line = w; }
+    }
+    if (line) lines.push(line);
+    if (lines.length > maxLines) { lines.length = maxLines; lines[maxLines - 1] += '…'; }
+    // Single words longer than the bubble get cut with an ellipsis
+    return lines.map(l => { if (ctx.measureText(l).width <= maxW) return l; while (l.length > 1 && ctx.measureText(l + '…').width > maxW) l = l.slice(0, -1); return l + '…'; });
+  }
+  function drawBubbles() {
+    if (!bubbles.size) return;
+    const where = new Map();
+    for (const s of view.snakes) s.members.forEach((p, i) => { if (bubbles.has(p.pid)) where.set(p.pid, { p, head: i === 0 }); });
+    ctx.font = '700 13.5px Figtree, system-ui'; ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
+    // Lay out every bubble first, then nudge overlapping ones upward so nearby speakers stack
+    const items = [];
+    for (const [pid, b] of bubbles) {
+      if (now > b.until) { bubbles.delete(pid); continue; }
+      const w = where.get(pid); if (!w) continue;
+      const q = toScreen(w.p.x, w.p.y);
+      const lift = w.head ? (HEAD_R + 56) * cam.z + 14 : (R + 6) * cam.z + 8;
+      const lines = wrapLines(b.text, 200, 3), lh = 18;
+      const bw = Math.max(...lines.map(l => ctx.measureText(l).width)) + 24, bh = lines.length * lh + 14;
+      items.push({ pid, b, q, lines, lh, bw, bh, x: Math.max(8 + bw / 2, Math.min(W - 8 - bw / 2, q.x)), y: q.y - lift - bh });
+    }
+    items.sort((a, b) => b.y - a.y);
+    const placed = [];
+    for (const it of items) {
+      for (let moved = true, guard = 0; moved && guard < 20; guard++) {
+        moved = false;
+        for (const o of placed) {
+          if (Math.abs(it.x - o.x) < (it.bw + o.bw) / 2 + 4 && it.y < o.y + o.bh + 4 && it.y + it.bh > o.y - 4) { it.y = o.y - it.bh - 6; moved = true; }
+        }
+      }
+      placed.push(it);
+    }
+    for (const { pid, b, q, lines, lh, bw, bh, x, y } of items) {
+      if (y + bh < -20 || y > H + 20) continue;
+      const age = now - b.at, life = b.until - now;
+      const pop = Math.min(1, age / 160), alpha = Math.min(1, life / 400);
+      const mineB = pid === myPid;
+      ctx.save(); ctx.globalAlpha = alpha;
+      ctx.translate(x, y + bh); ctx.scale(.85 + .15 * pop, .85 + .15 * pop); ctx.translate(-x, -(y + bh));
+      ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.roundRect(x - bw / 2, y + 3, bw, bh, 14); ctx.fill();
+      ctx.fillStyle = mineB ? '#ff5fa2' : 'rgba(250,252,255,.97)';
+      ctx.beginPath(); ctx.roundRect(x - bw / 2, y, bw, bh, 14); ctx.fill();
+      // little tail pointing toward the speaker
+      const tx = Math.max(x - bw / 2 + 14, Math.min(x + bw / 2 - 14, q.x));
+      ctx.beginPath(); ctx.moveTo(tx - 7, y + bh - 1); ctx.lineTo(tx, y + bh + 8); ctx.lineTo(tx + 7, y + bh - 1); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = mineB ? '#2a0614' : '#0b1220';
+      lines.forEach((l, i) => ctx.fillText(l, x, y + 7 + lh / 2 + i * lh + .5));
+      ctx.restore();
+    }
+  }
 
   // ---------- Rendering ----------
   function inView(x, y, pad) {
@@ -637,6 +724,7 @@
     const vg = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * .35, W / 2, H / 2, Math.max(W, H) * .75);
     vg.addColorStop(0, 'rgba(4,8,16,0)'); vg.addColorStop(1, 'rgba(4,8,16,.6)');
     ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+    drawBubbles();
     if (me && myIdx > 0) {
       const hs = toScreen(me.x, me.y), pad = 46;
       if (hs.x < pad || hs.y < pad || hs.x > W - pad || hs.y > H - pad) {
@@ -704,6 +792,8 @@
   function hud() {
     if (now - hudAt < 120) return; hudAt = now;
     const online = ws && ws.readyState === 1;
+    $('chatBtn').hidden = !myPid;
+    $('audioCtl').classList.toggle('ingame', $('intro').hidden);
     const humans = view ? view.humans : 0;
     $('n').textContent = humans.toLocaleString();
     $('introN').textContent = humans.toLocaleString();
@@ -799,7 +889,7 @@
   function knockedOut() {
     if (spot) { stats.opens += spot.opens; spot = null; }
     myPid = 0; me = mine = null; joinInfo = null; closeRace();
-    shake.a = 16; sfx('out');
+    shake.a = 16; sfx('out'); closeChat();
     $('bottom').hidden = true; $('peek').hidden = true; $('shareModal').hidden = true;
     $('intro').hidden = false; $('joinBtn').disabled = false;
     $('joinErr').textContent = '👹 A troll got you! Without a tail to protect you, one bump knocks you out. Jump back in?';
@@ -1042,6 +1132,7 @@
   addEventListener('pointerdown', () => window.PFAudio && PFAudio.unlock(), { once: true });
   syncAudioButtons();
   if (DONATE_URL) { $('donate').href = DONATE_URL; $('donate').hidden = false; }
+  $('donate').addEventListener('click', () => sfx('click'));
   connect();
   requestAnimationFrame(frame);
 })();
