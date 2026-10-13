@@ -176,7 +176,18 @@ window.PFAudio = (() => {
     lost: t => [74, 70, 67].forEach((n, i) => tone(mtof(n), t + i * 0.08, { type: 'triangle', dur: 0.25, gain: 0.18 })),
     crash: t => { whoosh(t, 2500, 200, 0.35, 0.4); tone(110, t, { dur: 0.3, gain: 0.35, to: 45, verb: 0 }); },
     troll: t => { tone(320, t, { type: 'sawtooth', dur: 0.45, gain: 0.22, to: 120, filter: 1100 }); tone(160, t + 0.05, { type: 'square', dur: 0.35, gain: 0.06, to: 70, filter: 700 }); },
-    out: t => { [67, 66, 65].forEach((n, i) => tone(mtof(n - 12), t + i * 0.28, { type: 'sawtooth', dur: 0.32, gain: 0.18, filter: 900 })); tone(mtof(52), t + 0.84, { type: 'sawtooth', dur: 0.9, gain: 0.19, to: mtof(47), filter: 800 }); },
+    // Game over: a low thud, then a "wah wah wah wahhh" with a wobble on the last note
+    out: t => {
+      tone(140, t, { dur: 0.35, gain: 0.4, to: 40, verb: 0 });
+      [67, 66, 65].forEach((n, i) => tone(mtof(n - 12), t + 0.15 + i * 0.3, { type: 'sawtooth', dur: 0.3, gain: 0.26, filter: 1100, verb: 0.25 }));
+      const o = ctx.createOscillator(), e = ctx.createGain(), f = ctx.createBiquadFilter(), vib = ctx.createOscillator(), va = ctx.createGain(), t0 = t + 1.05;
+      o.type = 'sawtooth'; o.frequency.setValueAtTime(mtof(52), t0); o.frequency.linearRampToValueAtTime(mtof(47), t0 + 1.2);
+      vib.frequency.value = 6; va.gain.value = 6; vib.connect(va).connect(o.frequency);
+      f.type = 'lowpass'; f.frequency.value = 1000;
+      e.gain.setValueAtTime(0, t0); e.gain.linearRampToValueAtTime(0.28, t0 + 0.04); e.gain.setValueAtTime(0.28, t0 + 0.9); e.gain.exponentialRampToValueAtTime(0.001, t0 + 1.4);
+      o.connect(f).connect(e).connect(sfxBus); o.start(t0); o.stop(t0 + 1.45); vib.start(t0); vib.stop(t0 + 1.45);
+    },
+    lose: t => { tone(mtof(71), t, { type: 'triangle', dur: 0.22, gain: 0.2 }); tone(mtof(67), t + 0.16, { type: 'triangle', dur: 0.22, gain: 0.2 }); tone(mtof(62), t + 0.32, { type: 'triangle', dur: 0.5, gain: 0.2, verb: 0.3 }); },
     opened: t => { tone(1320, t, { dur: 0.5, gain: 0.13, verb: 0.35 }); tone(1980, t + 0.07, { dur: 0.6, gain: 0.09, verb: 0.35 }); },
     turn: t => { tone(mtof(76), t, { dur: 0.35, gain: 0.1, verb: 0.3 }); tone(mtof(83), t + 0.1, { dur: 0.45, gain: 0.08, verb: 0.3 }); },
     chat: t => { tone(780, t, { type: 'sine', dur: 0.09, gain: 0.12, to: 1150, verb: 0.1 }); },
@@ -199,6 +210,13 @@ window.PFAudio = (() => {
       if (lastPlayed[name] && t - lastPlayed[name] < 0.07) return;
       lastPlayed[name] = t;
       SFX[name](t + 0.01);
+    },
+    // Briefly lower the music so a big moment (like game over) stands out
+    duck(sec) {
+      if (!ctx || !timer) return;
+      const g = musicBus.gain, t = ctx.currentTime;
+      g.cancelScheduledValues(t); g.setValueAtTime(g.value, t);
+      g.linearRampToValueAtTime(0.06, t + 0.15); g.setValueAtTime(0.06, t + sec); g.linearRampToValueAtTime(0.32, t + sec + 2);
     },
     get music() { return prefs.music; },
     get sfx() { return prefs.sfx; },

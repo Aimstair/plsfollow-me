@@ -167,6 +167,9 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 input[type="file"] { font-size: 13px; padding: 9px; color: var(--muted); }
 input[type="file"]::file-selector-button { font: inherit; font-weight: 800; color: var(--ink); background: rgba(255,255,255,.1); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; margin-right: 10px; cursor: pointer; }
 input, select { font: inherit; font-size: 16px; color: var(--ink); background: rgba(7, 13, 24, .8); border: 1px solid var(--line); border-radius: 12px; padding: 12px; min-width: 0; user-select: text; -webkit-user-select: text; }
+/* Draw our own chevron so it sits inside the rounded corner instead of the browser's default arrow */
+select { -webkit-appearance: none; appearance: none; padding-right: 40px; cursor: pointer; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%238ea4b8' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 15px center; background-size: 12px 8px; }
+select option { color: #0b1220; background: #fff; }
 .cta { font: inherit; font-family: var(--display); font-size: 22px; color: #2a0614; background: linear-gradient(180deg, #ff8cc0, var(--you)); border: 0; border-radius: 16px; padding: 14px 24px; cursor: pointer; box-shadow: 0 6px 0 #b8336f, 0 14px 30px rgba(255, 95, 162, .4); transition: transform .1s, box-shadow .1s; }
 .cta:hover { transform: translateY(-1px); }
 .cta:active { transform: translateY(5px); box-shadow: 0 1px 0 #b8336f, 0 6px 16px rgba(255, 95, 162, .4); }
@@ -216,7 +219,7 @@ input, select { font: inherit; font-size: 16px; color: var(--ink); background: r
 </style>
 <style>
 [hidden] { display: none !important; }
-#donate { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px 0 13px; border-radius: 999px; font: 800 14px var(--body); color: var(--ink); text-decoration: none; border: 1px solid rgba(255, 95, 162, .45); box-shadow: 0 0 0 0 rgba(255, 95, 162, .5), 0 8px 24px rgba(0, 0, 0, .35); transition: transform .15s, border-color .15s; animation: donatePulse 2.8s ease-in-out infinite; }
+#donate { position: fixed; z-index: 8; left: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px 0 13px; border-radius: 999px; font: 800 14px var(--body); color: var(--ink); text-decoration: none; border: 1px solid rgba(255, 95, 162, .45); box-shadow: 0 0 0 0 rgba(255, 95, 162, .5), 0 8px 24px rgba(0, 0, 0, .35); transition: transform .15s, border-color .15s; animation: donatePulse 2.8s ease-in-out infinite; }
 #donate:hover, #donate:focus-visible { transform: translateY(-1px); border-color: var(--you); }
 @keyframes donatePulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255, 95, 162, .35), 0 8px 24px rgba(0, 0, 0, .35); } 50% { box-shadow: 0 0 0 8px rgba(255, 95, 162, 0), 0 8px 24px rgba(0, 0, 0, .35); } }
 
@@ -235,9 +238,11 @@ input, select { font: inherit; font-size: 16px; color: var(--ink); background: r
 @media (max-width: 640px) {
   #audioCtl { top: calc(12px + env(safe-area-inset-top, 0px)); left: 12px; }
   #audioCtl.ingame { top: calc(104px + env(safe-area-inset-top, 0px)); flex-direction: column; }
-  .abtn, #donate { width: 38px; height: 38px; }
-  #donate { padding: 0; justify-content: center; font-size: 17px; }
-  #donate .dl { display: none; }
+  .abtn { width: 38px; height: 38px; }
+  /* In game the bottom of a phone is the spotlight card, so the coffee button rides just above it */
+  #donate { left: 12px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); height: 38px; padding: 0 13px 0 11px; font-size: 13px; }
+  #donate.ingame { width: 38px; padding: 0; justify-content: center; font-size: 17px; bottom: calc(var(--bottom-h, 0px) + 24px + env(safe-area-inset-bottom, 0px)); }
+  #donate.ingame .dl { display: none; }
   #toasts { width: calc(100% - 128px); }
 }
 #joinErr { margin: 0; color: #ff8fa3; font-weight: 700; font-size: 14px; }
@@ -310,8 +315,8 @@ input, select { font: inherit; font-size: 16px; color: var(--ink); background: r
   <button class="abtn glass" id="musicBtn" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V5l11-2v13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6" cy="18" r="3" fill="currentColor"/><circle cx="17" cy="16" r="3" fill="currentColor"/></svg></button>
   <button class="abtn glass" id="sfxBtn" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path class="wave" d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
   <button class="abtn glass" id="chatBtn" title="Chat (Enter)" aria-label="Chat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 4v-4h0A1.5 1.5 0 0 1 4 14.5z" fill="currentColor"/></svg></button>
-  <a id="donate" class="glass" href="#" target="_blank" rel="noopener" hidden><span aria-hidden="true">☕</span><span class="dl">Buy me a coffee</span></a>
 </div>
+<a id="donate" class="glass" href="#" target="_blank" rel="noopener" hidden><span aria-hidden="true">☕</span><span class="dl">Buy me a coffee</span></a>
 
 <form id="chatBar" class="glass" hidden autocomplete="off">
   <input id="chatIn" maxlength="80" placeholder="Say something to the snake…" aria-label="Chat message" enterkeyhint="send">
@@ -336,7 +341,7 @@ input, select { font: inherit; font-size: 16px; color: var(--ink); background: r
           <option value="tw">Twitch</option>
         </select>
       </div>
-      <label for="photo">Profile photo (optional, shown when you're the head)</label>
+      <label for="photo">Profile photo (optional, it's your face in the snake)</label>
       <input id="photo" name="photo" type="file" accept="image/*">
       <p id="joinErr" role="alert" hidden></p>
       <button class="cta" type="submit" id="joinBtn">Join the tail</button>

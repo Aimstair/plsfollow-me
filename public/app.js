@@ -1,7 +1,7 @@
 (() => {
   'use strict';
   // ---------- Constants ----------
-  const TAU = Math.PI * 2, R = 10.5, HEAD_R = 21, TICK_MS = 50, MAX_EXTRAP_MS = 120;
+  const TAU = Math.PI * 2, R = 13.5, HEAD_R = 21, TICK_MS = 50, MAX_EXTRAP_MS = 120;
   let LEAD_MS = 30000, RACE_MS = 10000, BOOT = '';
   // Donation link for the main-screen button. Leave empty to hide the button.
   const DONATE_URL = 'https://buymeacoffee.com/aimstair';
@@ -28,7 +28,7 @@
   function sprite(key, size, paint) {
     let c = cache.get(key);
     if (!c) {
-      if (cache.size > 1500) cache.clear();
+      if (cache.size > 3000) cache.clear();
       c = document.createElement('canvas'); c.width = c.height = size; paint(c.getContext('2d'), size); cache.set(key, c);
     }
     return c;
@@ -250,6 +250,9 @@
       if (e.sid !== me0.sid) return;
       if (e.head !== myPid) sfx('turn');
       if (e.prev === myPid && e.head !== myPid) toast(e.why === 'afk' ? 'You went quiet, so the next person took over.' : 'Your 30 seconds are up. Back to the tail!');
+      // You raced this turn and someone else got the crown
+      if (myEntry && myEntry.sid === e.sid && e.head !== myPid) sfx('lose');
+      myEntry = null;
       if (e.ms && e.head !== myPid) toast(`⚔️ ${name(e.head)} won the race in ${e.ms} ms and is the new head`);
     }
   }
@@ -309,6 +312,7 @@
   // ---------- Race for next head ----------
   let race = null, goInfo = null, raceTop = null, padTimer = 0, doneTimer = 0;
   const raced = new Set();
+  let myEntry = null; // a valid race time of ours in the current turn
   const keyOf = (sid, turn) => `${sid}:${turn}`;
   const raceLive = s => s.left <= RACE_MS;
   function openRace(s) {
@@ -354,6 +358,7 @@
     if (m.ok) {
       stats.best = stats.best ? Math.min(stats.best, m.ms) : m.ms;
       if (m.rank === 1) sfx('win');
+      if (race) myEntry = { sid: race.sid };
       $('duelResult').textContent = m.rank === 1 ? "You're in first so far! The winner is announced when the turn ends 👑" : `You're #${m.rank} so far.`;
     } else {
       $('duelResult').textContent = m.why === 'early' ? 'Too early. You can race again next turn.' : m.why === 'invalid' ? "That tap didn't count (connection hiccup). Try next turn." : 'The turn ended before your tap arrived.';
@@ -612,9 +617,9 @@
     return PLAT_DOT[p];
   }
   // Profile picture sprite: the uploaded photo, or a generated avatar with the handle's initial
-  const avatar = pid => {
+  const avatar = (pid, size = 128) => {
     const img = photo(pid), h = handleOf(pid);
-    return sprite(`a${pid}|${img ? 'i' : ''}|${h || ''}`, 128, (g, S) => {
+    return sprite(`a${pid}|${img ? 'i' : ''}|${h || ''}|${size}`, size, (g, S) => {
       const c = S / 2;
       g.save(); g.beginPath(); g.arc(c, c, c, 0, TAU); g.clip();
       if (img) {
@@ -679,13 +684,16 @@
         const p = m[i];
         if (!inView(p.x, p.y, 30)) continue;
         const taper = i > L - 6 ? .6 + .4 * (L - 1 - i) / 5 : 1, r = R * taper;
+        // Every segment is that person's profile: their photo, or a colored initial placeholder
         if (p.pid === myPid) {
-          const pulse = 1 + Math.sin(now / 200) * .12;
+          const pulse = 1 + Math.sin(now / 200) * .12, rr = r * 1.3;
           ctx.globalAlpha = .7; ctx.drawImage(glow('255,95,162'), p.x - 40, p.y - 40, 80, 80); ctx.globalAlpha = 1;
-          ctx.drawImage(bead(330, 100, 66), p.x - r * 1.25, p.y - r * 1.25, r * 2.5, r * 2.5);
-          ctx.beginPath(); ctx.arc(p.x, p.y, r * 1.25 + 5 * pulse, 0, TAU); ctx.lineWidth = 3; ctx.strokeStyle = '#fff'; ctx.stroke();
+          ctx.beginPath(); ctx.arc(p.x, p.y, rr + 2, 0, TAU); ctx.fillStyle = '#ff5fa2'; ctx.fill();
+          ctx.drawImage(avatar(p.pid, 48), p.x - rr, p.y - rr, rr * 2, rr * 2);
+          ctx.beginPath(); ctx.arc(p.x, p.y, rr + 4 + 2 * pulse, 0, TAU); ctx.lineWidth = 2.5; ctx.strokeStyle = '#fff'; ctx.stroke();
         } else {
-          ctx.drawImage(bead(hueOf(p.pid)), p.x - r, p.y - r, r * 2, r * 2);
+          ctx.beginPath(); ctx.arc(p.x, p.y, r + 1.6, 0, TAU); ctx.fillStyle = 'rgba(8,12,22,.85)'; ctx.fill();
+          ctx.drawImage(avatar(p.pid, 48), p.x - r, p.y - r, r * 2, r * 2);
         }
       }
       // boost trail
@@ -794,6 +802,8 @@
     const online = ws && ws.readyState === 1;
     $('chatBtn').hidden = !myPid;
     $('audioCtl').classList.toggle('ingame', $('intro').hidden);
+    $('donate').classList.toggle('ingame', $('intro').hidden);
+    document.documentElement.style.setProperty('--bottom-h', ($('bottom').hidden ? 0 : $('bottom').offsetHeight) + 'px');
     const humans = view ? view.humans : 0;
     $('n').textContent = humans.toLocaleString();
     $('introN').textContent = humans.toLocaleString();
@@ -889,7 +899,7 @@
   function knockedOut() {
     if (spot) { stats.opens += spot.opens; spot = null; }
     myPid = 0; me = mine = null; joinInfo = null; closeRace();
-    shake.a = 16; sfx('out'); closeChat();
+    shake.a = 16; sfx('out'); if (window.PFAudio) PFAudio.duck(3); closeChat();
     $('bottom').hidden = true; $('peek').hidden = true; $('shareModal').hidden = true;
     $('intro').hidden = false; $('joinBtn').disabled = false;
     $('joinErr').textContent = '👹 A troll got you! Without a tail to protect you, one bump knocks you out. Jump back in?';
