@@ -22,6 +22,7 @@ function bot(i) {
       tally.states++; tally.bytes += data.length;
       // Decode just enough to find ourselves
       const b = data; let o = 1 + 8 + 2 + 2; const nb = b.readUInt8(o); o += 1 + nb * 4;
+      const nt = b.readUInt8(o); o += 1 + nt * 6;
       const ns = b.readUInt16LE(o); o += 2; mySid = 0; myIdx = -1;
       for (let s = 0; s < ns; s++) {
         const id = b.readUInt16LE(o), len = b.readUInt16LE(o + 2), ang = b.readInt16LE(o + 8) / 5000; o += 10;

@@ -216,6 +216,7 @@ input, select { font: inherit; font-size: 16px; color: var(--ink); background: r
 </style>
 <style>
 [hidden] { display: none !important; }
+#intro .legend { font-size: 13.5px; color: var(--muted); max-width: 440px; margin: 0 auto; }
 #joinErr { margin: 0; color: #ff8fa3; font-weight: 700; font-size: 14px; }
 #status.offline { background: rgba(120, 30, 50, .85); }
 </style>
@@ -287,6 +288,7 @@ input, select { font: inherit; font-size: 16px; color: var(--ink); background: r
     <span class="beads" aria-hidden="true"><i style="--c:#ff5fa2;--d:0"></i><i style="--c:#ffc93c;--d:1"></i><i style="--c:#34d399;--d:2"></i><i style="--c:#7dd3fc;--d:3"></i><i style="--c:#a78bfa;--d:4"></i><i style="--c:#fb923c;--d:5"></i><i style="--c:#f472b6;--d:6"></i></span>
     <h1>pls follow <span>me</span></h1>
     <p>One giant snake made of strangers. Each head leads for 30 seconds. In the last 10, everyone races to be next, and while you lead, the whole snake sees your profile.</p>
+    <p class="legend"><b>⚡</b> boosts make you faster · <b>👹 Trolls</b> roam the map: bump one with your head and lose 5 seconds of your turn, let one hit your body and your snake breaks.</p>
     <div class="live"><span class="live-dot"></span><span><b id="introN">0</b> strangers are in the snake right now</span></div>
     <form id="joinForm" class="glass">
       <label for="handle">Your handle (optional)</label>
@@ -305,7 +307,7 @@ input, select { font: inherit; font-size: 16px; color: var(--ink); background: r
       <p id="joinErr" role="alert" hidden></p>
       <button class="cta" type="submit" id="joinBtn">Join the tail</button>
     </form>
-    <small id="introNote">Real people, live. Grey ghosts fill empty spots and leave as people join.</small>
+    <small id="introNote">Every segment is a real person, live.</small>
   </div>
 </div>
 

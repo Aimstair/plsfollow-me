@@ -1,7 +1,7 @@
 # The whole game lives in one process's memory, so this app must run on exactly ONE machine.
 # Deploy with: fly deploy --ha=false
 app = "plsfollow-me"
-primary_region = "iad"
+primary_region = "sin"
 
 [http_service]
   internal_port = 8080

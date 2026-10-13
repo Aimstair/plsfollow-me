@@ -30,7 +30,7 @@ It prints messages received, race taps accepted/rejected, and the server's tick 
 | Path | What it is |
 |---|---|
 | `server.js` | HTTP static files, `/healthz`, avatar images at `/a/<boot>/<pid>`, WebSocket at `/ws` |
-| `src/game.js` | Authoritative 20 Hz simulation: snakes, turns, races, steals, bites, ghosts, binary state encoding |
+| `src/game.js` | Authoritative 20 Hz simulation: snakes, turns, races, steals, bites, trolls, binary state encoding |
 | `public/index.html` | Markup and styles |
 | `public/app.js` | Client: interpolation, rendering, input, race pad, spotlight card, share card |
 | `scripts/load-test.js` | Scripted players for testing |

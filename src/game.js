@@ -9,11 +9,13 @@ const CFG = {
   SPEED: 190, TURN: 4.6, SPACING: 21, HIT: 22, SELF_SKIP: 10,
   GRACE_MS: 1500, STEAL_GRACE_MS: 800,
   BOOST_MS: 3000, BOOST: 1.6, BOLT_HIT: 28,
-  BOT_FILL: 24, // grey ghosts keep the room from looking empty; one leaves per human
+  // Trolls roam the map and drift toward snakes. Head bump: the leader loses time. Body hit: the snake breaks.
+  TROLL_BASE: 6, TROLL_PER_HUMANS: 12, TROLL_MAX: 30,
+  TROLL_SPEED: 90, TROLL_TURN: 2, TROLL_SIGHT: 450,
+  TROLL_HEAD_HIT: 34, TROLL_BODY_HIT: 26, TROLL_COOL_MS: 4000, TROLL_TIME_COST_MS: 5000,
   AUTOPILOT_MS: 1000, AFK_MS: 8000,
   MIN_REACTION_MS: 120, GO_WARN_MS: 1200,
 };
-const BOT_BASE = 2 ** 31; // bot pids live above this, so clients can tell them apart
 const PLATFORMS = new Set(['ig', 'tt', 'x', 'yt', 'tw']);
 const HANDLE_RE = /^[A-Za-z0-9._-]{1,30}$/;
 const BANNED_RE = /(n[i1]gg|f[a@4]gg|r[a@4]pist|nazi|hitler|kys|cunt|whore|pedo)/i;
@@ -32,12 +34,11 @@ class Game {
     this.snakes = [];
     this.bolts = [];
     this.events = [];
-    this.pidSeq = 1; this.botSeq = 0; this.sidSeq = 1;
-    this.humans = 0; this.bots = 0;
-    this.arenaR = this.radiusFor(CFG.BOT_FILL);
+    this.trolls = [];
+    this.pidSeq = 1; this.sidSeq = 1;
+    this.humans = 0;
+    this.arenaR = this.radiusFor(0);
     this.perf = { sum: 0, n: 0, max: 0, avg: 0, peak: 0 };
-    this.spawnLine(this.makeBots(16), 300, 0, Math.PI);
-    this.spawnLine(this.makeBots(8), -250, 450, 0.3);
     this.timer = setInterval(() => this.tick(), CFG.TICK_MS);
     this.pinger = setInterval(() => this.ping(), 2000);
   }
@@ -45,15 +46,6 @@ class Game {
   radiusFor(n) { return 800 + 30 * Math.sqrt(n); }
 
   // ---------- Players and snakes ----------
-  makeBots(n) {
-    const out = [];
-    for (let i = 0; i < n; i++) {
-      const p = { pid: BOT_BASE + (this.botSeq++ % BOT_BASE), bot: true, x: 0, y: 0, angle: 0, target: 0, wob: 0, lastInput: 0, lastSteer: 0 };
-      this.players.set(p.pid, p); out.push(p);
-    }
-    this.bots += n;
-    return out;
-  }
   makeSnake(members) {
     const id = this.sidSeq; this.sidSeq = (this.sidSeq % 65535) + 1;
     const s = { id, members, grace: this.now + CFG.GRACE_MS, turn: 0, leaderSince: 0, boostUntil: 0, race: null };
@@ -67,8 +59,7 @@ class Game {
   }
   snakeOf(p) { return this.snakes.find(s => s.members.includes(p)); }
   biggest() { return this.snakes.reduce((a, b) => (!a || b.members.length > a.members.length ? b : a), null); }
-  hasHuman(s) { return s.members.some(p => !p.bot); }
-  active(p) { return !p.bot && this.now - p.lastInput < CFG.AFK_MS; }
+  active(p) { return this.now - p.lastInput < CFG.AFK_MS; }
 
   promote(s) {
     const h = s.members[0], n = s.members[1];
@@ -83,8 +74,8 @@ class Game {
     if (m.length < 2) { this.promote(s); return; }
     const win = this.raceWinner(s);
     m.shift(); m.push(old);
-    // Race winner leads. Otherwise the next active human in line; bots only lead bot-only snakes.
-    let next = win ? win.p : m.find(p => this.active(p)) || m.find(p => !p.bot) || m[0];
+    // Race winner leads. Otherwise the next active person in line.
+    let next = win ? win.p : m.find(p => this.active(p)) || m[0];
     if (next !== m[0]) { m.splice(m.indexOf(next), 1); m.unshift(next); }
     this.promote(s);
     this.event({ k: 'turn', sid: s.id, head: m[0].pid, prev: old.pid, ms: win ? win.ms : 0, why });
@@ -100,7 +91,7 @@ class Game {
 
   removePlayer(p) {
     this.players.delete(p.pid);
-    if (p.bot) this.bots--; else this.humans--;
+    this.humans--;
     const s = this.snakeOf(p); if (!s) return;
     const i = s.members.indexOf(p);
     s.members.splice(i, 1);
@@ -108,22 +99,76 @@ class Game {
     if (i === 0) { this.promote(s); this.event({ k: 'turn', sid: s.id, head: s.members[0].pid, prev: p.pid, ms: 0, why: 'left' }); }
   }
 
-  balanceBots() {
-    const want = Math.max(0, CFG.BOT_FILL - this.humans);
-    // A few per tick, so the world changes gradually
-    for (let i = 0; i < 3 && this.bots < want; i++) {
-      const s = this.biggest(), [b] = this.makeBots(1);
-      if (!s) { this.spawnLine([b], rand(-300, 300), rand(-300, 300), rand(0, TAU)); continue; }
-      const t = s.members[s.members.length - 1]; b.x = t.x; b.y = t.y; s.members.push(b);
+  // ---------- Trolls ----------
+  spawnTroll() {
+    // Appear away from every head so nobody gets hit out of nowhere
+    let best = null;
+    for (let tries = 0; tries < 8; tries++) {
+      const a = rand(0, TAU), r = Math.sqrt(Math.random()) * this.arenaR * 0.9;
+      const t = { x: Math.cos(a) * r, y: Math.sin(a) * r, angle: rand(0, TAU), wob: 0, coolUntil: this.now + 1500 };
+      const d = Math.min(Infinity, ...this.snakes.map(s => Math.hypot(s.members[0].x - t.x, s.members[0].y - t.y)));
+      if (!best || d > best.d) best = { t, d };
+      if (d > 500) break;
     }
-    for (let i = 0; i < 3 && this.bots > want; i++) {
-      let victim = null;
-      for (const s of [...this.snakes].sort((a, b) => b.members.length - a.members.length)) {
-        for (let k = s.members.length - 1; k >= 0 && !victim; k--) if (s.members[k].bot) victim = s.members[k];
-        if (victim) break;
+    return best.t;
+  }
+
+  balanceTrolls() {
+    const want = Math.min(CFG.TROLL_MAX, CFG.TROLL_BASE + Math.floor(this.humans / CFG.TROLL_PER_HUMANS));
+    while (this.trolls.length < want) this.trolls.push(this.spawnTroll());
+    if (this.trolls.length > want) this.trolls.length = want;
+  }
+
+  moveTrolls(dt) {
+    for (const t of this.trolls) {
+      const cooling = this.now < t.coolUntil;
+      // Drift toward the nearest head they can see; after a hit, back off until the cooldown ends
+      let target = null, bd = CFG.TROLL_SIGHT;
+      for (const s of this.snakes) {
+        const h = s.members[0], d = Math.hypot(h.x - t.x, h.y - t.y);
+        if (d < bd) { bd = d; target = h; }
       }
-      if (!victim) break;
-      this.removePlayer(victim);
+      t.wob = t.wob * 0.95 + (Math.random() - 0.5) * 0.3;
+      let want = t.angle + t.wob;
+      if (target) want = Math.atan2(target.y - t.y, target.x - t.x) + (cooling ? Math.PI : 0) + t.wob * 0.5;
+      if (Math.hypot(t.x, t.y) > this.arenaR * 0.85) want = Math.atan2(-t.y, -t.x);
+      let d = want - t.angle; d = Math.atan2(Math.sin(d), Math.cos(d));
+      const mt = CFG.TROLL_TURN * dt; t.angle += Math.max(-mt, Math.min(mt, d));
+      const sp = CFG.TROLL_SPEED * (cooling ? 0.8 : 1);
+      t.x += Math.cos(t.angle) * sp * dt; t.y += Math.sin(t.angle) * sp * dt;
+    }
+  }
+
+  trollHits() {
+    for (const t of this.trolls) {
+      if (this.now < t.coolUntil) continue;
+      for (const s of this.snakes.slice()) {
+        if (this.now < s.grace) continue;
+        const m = s.members, h = m[0];
+        if (Math.hypot(h.x - t.x, h.y - t.y) < CFG.TROLL_HEAD_HIT) {
+          // Head bump: the leader's turn gets shorter, so the race comes sooner
+          s.leaderSince -= CFG.TROLL_TIME_COST_MS;
+          const r = s.race;
+          if (!r.warned) r.goAt = Math.max(r.goAt - CFG.TROLL_TIME_COST_MS, this.now + CFG.GO_WARN_MS + 200);
+          s.grace = this.now + 600;
+          t.coolUntil = this.now + CFG.TROLL_COOL_MS;
+          this.event({ k: 'troll', sid: s.id, head: h.pid, ms: CFG.TROLL_TIME_COST_MS, x: Math.round(h.x), y: Math.round(h.y) });
+          break;
+        }
+        let k = -1;
+        for (let i = 1; i < m.length; i++) {
+          const q = m[i];
+          if (Math.abs(q.x - t.x) < CFG.TROLL_BODY_HIT && Math.abs(q.y - t.y) < CFG.TROLL_BODY_HIT && Math.hypot(q.x - t.x, q.y - t.y) < CFG.TROLL_BODY_HIT) { k = i; break; }
+        }
+        if (k < 0) continue;
+        // Body hit: the snake breaks, and everyone from the hit point back becomes a new snake
+        const at = m[k], tail = m.splice(k);
+        s.grace = this.now + CFG.GRACE_MS;
+        const ns = this.makeSnake(tail);
+        t.coolUntil = this.now + CFG.TROLL_COOL_MS;
+        this.event({ k: 'break', sid: s.id, nsid: ns.id, k2: k, n: tail.length, x: Math.round(at.x), y: Math.round(at.y) });
+        break;
+      }
     }
   }
 
@@ -132,7 +177,7 @@ class Game {
     const t0 = process.hrtime.bigint();
     const prev = this.now; this.now = Date.now();
     const dt = Math.min(0.1, Math.max(0, (this.now - prev) / 1000));
-    this.balanceBots();
+    this.balanceTrolls();
     let segs = 0; for (const s of this.snakes) segs += s.members.length;
     this.arenaR += (this.radiusFor(segs) - this.arenaR) * 0.01;
     const wantBolts = Math.min(30, 6 + Math.floor(Math.sqrt(segs)));
@@ -141,7 +186,9 @@ class Game {
 
     for (const s of this.snakes.slice()) this.leadership(s);
     for (const s of this.snakes) this.move(s, dt);
+    this.moveTrolls(dt);
     this.collide();
+    this.trollHits();
     this.flushRaceBoards();
     this.broadcast();
 
@@ -152,8 +199,7 @@ class Game {
 
   leadership(s) {
     const h = s.members[0];
-    if (h.bot && this.hasHuman(s)) { this.endTurn(s, 'human'); return; }
-    if (!h.bot && s.members.length > 1 && this.now - h.lastInput > CFG.AFK_MS && s.members.some(p => p !== h && this.active(p))) { this.endTurn(s, 'afk'); return; }
+    if (s.members.length > 1 && this.now - h.lastInput > CFG.AFK_MS && s.members.some(p => p !== h && this.active(p))) { this.endTurn(s, 'afk'); return; }
     if (this.now - s.leaderSince >= CFG.LEAD_MS) { this.endTurn(s, 'time'); return; }
     const r = s.race;
     if (!r.warned && this.now >= r.goAt - CFG.GO_WARN_MS) {
@@ -181,7 +227,7 @@ class Game {
   move(s, dt) {
     const m = s.members, h = m[0], sp = CFG.SPEED * (this.now < s.boostUntil ? CFG.BOOST : 1);
     // Humans steer; a head with no recent input (tab hidden, dropped) goes on autopilot
-    if (h.bot || this.now - h.lastSteer > CFG.AUTOPILOT_MS) this.wander(h);
+    if (this.now - h.lastSteer > CFG.AUTOPILOT_MS) this.wander(h);
     let d = h.target - h.angle; d = Math.atan2(Math.sin(d), Math.cos(d));
     const mt = CFG.TURN * dt; h.angle += Math.max(-mt, Math.min(mt, d));
     h.x += Math.cos(h.angle) * sp * dt; h.y += Math.sin(h.angle) * sp * dt;
@@ -276,7 +322,7 @@ class Game {
     const c = { ws, player: null, rtt: 300, pingAt: 0, alive: true, opened: new Set(), bucket: 40, bucketAt: Date.now() };
     this.clients.add(c);
     this.send(c, { t: 'hello', boot: this.boot, now: Date.now(), cfg: { LEAD_MS: CFG.LEAD_MS, RACE_MS: CFG.RACE_MS, TICK_MS: CFG.TICK_MS } });
-    const l = []; for (const p of this.players.values()) if (!p.bot) l.push(this.profileRow(p));
+    const l = []; for (const p of this.players.values()) l.push(this.profileRow(p));
     if (l.length) this.send(c, { t: 'prof', l });
     ws.on('pong', () => { c.alive = true; if (c.pingAt) c.rtt = Date.now() - c.pingAt; });
     return c;
@@ -330,20 +376,21 @@ class Game {
       const buf = Buffer.from(m.img, 'base64');
       if (buf.length > 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) img = buf; // JPEG only
     }
-    const p = { pid: this.pidSeq++, bot: false, handle: handle || null, platform, img, client: c, x: 0, y: 0, angle: 0, target: 0, wob: 0, lastInput: this.now, lastSteer: 0 };
+    const p = { pid: this.pidSeq++, handle: handle || null, platform, img, client: c, x: 0, y: 0, angle: 0, target: 0, wob: 0, lastInput: this.now, lastSteer: 0 };
     this.players.set(p.pid, p); this.humans++;
     c.player = p;
-    // New people join the tail of the biggest snake
+    // New people join the tail of the biggest snake. Nobody here yet: you start your own and lead it.
     const s = this.biggest();
     if (s) { const t = s.members[s.members.length - 1]; p.x = t.x + rand(-2, 2); p.y = t.y + rand(-2, 2); s.members.push(p); }
     else this.spawnLine([p], rand(-200, 200), rand(-200, 200), rand(0, TAU));
+    p.lastSteer = this.now; // a fresh head keeps going straight until the first steering message
     this.send(c, { t: 'you', pid: p.pid });
     this.broadcastJson({ t: 'prof', l: [this.profileRow(p)] });
   }
 
   open(c, m) {
     const p = this.players.get(Number(m.pid));
-    if (!c.player || !p || p.bot || !p.handle || p === c.player || c.opened.has(p.pid)) return;
+    if (!c.player || !p || !p.handle || p === c.player || c.opened.has(p.pid)) return;
     c.opened.add(p.pid); // one count per viewer per profile
     if (p.client) this.send(p.client, { t: 'opened', n: 1 });
   }
@@ -367,19 +414,27 @@ class Game {
   }
 
   // Binary state, little-endian:
-  //   u8 type=1 | f64 serverTime | u16 arenaR | u16 humans | u8 boltCount | (i16 x, i16 y)*bolts | u16 snakeCount
+  //   u8 type=1 | f64 serverTime | u16 arenaR | u16 humans | u8 boltCount | (i16 x, i16 y)*bolts
+  //   u8 trollCount | (i16 x, i16 y, u8 angle(0-255), u8 flags(bit0 cooling))*trolls | u16 snakeCount
   //   per snake: u16 id | u16 len | u16 leadLeft(10ms units) | u8 flags(bit0 boost) | u8 turn | i16 angle*5000
   //   per seg:   i16 x | i16 y | u32 pid
   encode() {
     let segs = 0; for (const s of this.snakes) segs += s.members.length;
     const nb = Math.min(255, this.bolts.length);
-    const buf = Buffer.allocUnsafe(16 + nb * 4 + this.snakes.length * 10 + segs * 8);
+    const nt = Math.min(255, this.trolls.length);
+    const buf = Buffer.allocUnsafe(17 + nb * 4 + nt * 6 + this.snakes.length * 10 + segs * 8);
     const i16 = v => Math.max(-32768, Math.min(32767, Math.round(v)));
     let o = 0;
     o = buf.writeUInt8(1, o); o = buf.writeDoubleLE(this.now, o);
     o = buf.writeUInt16LE(Math.min(65535, Math.round(this.arenaR)), o); o = buf.writeUInt16LE(Math.min(65535, this.humans), o);
     o = buf.writeUInt8(nb, o);
     for (let i = 0; i < nb; i++) { o = buf.writeInt16LE(i16(this.bolts[i].x), o); o = buf.writeInt16LE(i16(this.bolts[i].y), o); }
+    o = buf.writeUInt8(nt, o);
+    for (let i = 0; i < nt; i++) {
+      const t = this.trolls[i], a = ((t.angle % TAU) + TAU) % TAU;
+      o = buf.writeInt16LE(i16(t.x), o); o = buf.writeInt16LE(i16(t.y), o);
+      o = buf.writeUInt8(Math.round(a / TAU * 255) & 255, o); o = buf.writeUInt8(this.now < t.coolUntil ? 1 : 0, o);
+    }
     o = buf.writeUInt16LE(this.snakes.length, o);
     for (const s of this.snakes) {
       const left = Math.max(0, CFG.LEAD_MS - (this.now - s.leaderSince));
@@ -394,10 +449,10 @@ class Game {
   }
 
   health() {
-    return { ok: true, humans: this.humans, bots: this.bots, snakes: this.snakes.length, clients: this.clients.size, tickAvgMs: +this.perf.avg.toFixed(2), tickPeakMs: +this.perf.peak.toFixed(2) };
+    return { ok: true, humans: this.humans, trolls: this.trolls.length, snakes: this.snakes.length, clients: this.clients.size, tickAvgMs: +this.perf.avg.toFixed(2), tickPeakMs: +this.perf.peak.toFixed(2) };
   }
 
   stop() { clearInterval(this.timer); clearInterval(this.pinger); }
 }
 
-module.exports = { Game, CFG, BOT_BASE };
+module.exports = { Game, CFG };
