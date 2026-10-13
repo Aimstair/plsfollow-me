@@ -1,0 +1,1208 @@
+<title>plsfollow.me Snake</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bagel+Fat+One&family=Caveat:wght@600;700&family=Instrument+Serif:ital@0;1&family=Figtree:wght@400;600;800;900&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: full-bleed toy-arcade arena at night. HUD glass floats at edges; the head's spotlight card is the hero at bottom center. */
+:root {
+  color-scheme: dark;
+  --night: #070d18;
+  --ink: #f1f6fa;
+  --muted: #8ea4b8;
+  --you: #ff5fa2;
+  --crown: #ffc93c;
+  --crown-deep: #e09a12;
+  --bolt: #7dd3fc;
+  --go: #34d399;
+  --stop: #f43f5e;
+  --glass: rgba(14, 22, 38, .78);
+  --glass-hi: rgba(28, 40, 64, .9);
+  --line: rgba(160, 190, 220, .16);
+  --display: "Bagel Fat One", "Arial Rounded MT Bold", system-ui, sans-serif;
+  --body: "Figtree", system-ui, -apple-system, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+@property --ang { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+html, body { height: 100%; }
+body { background: var(--night); color: var(--ink); font-family: var(--body); overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+canvas#game { position: fixed; inset: 0; display: block; width: 100%; height: 100%; }
+
+.hud { position: fixed; pointer-events: none; z-index: 2; }
+.glass { background: var(--glass); border: 1px solid var(--line); border-radius: 16px; backdrop-filter: blur(10px) saturate(1.3); -webkit-backdrop-filter: blur(10px) saturate(1.3); box-shadow: 0 10px 30px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.06); }
+.label { margin: 0; font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); font-weight: 800; }
+
+/* Top */
+#brand { top: calc(16px + env(safe-area-inset-top, 0px)); left: 18px; font-family: var(--display); font-size: 22px; display: flex; align-items: center; gap: 8px; }
+#brand span { color: var(--you); }
+.beads { display: inline-flex; gap: 2px; }
+.beads i { width: 9px; height: 9px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff8, transparent 45%), var(--c); animation: wave 1.4s ease-in-out infinite; animation-delay: calc(var(--d) * -.12s); }
+@keyframes wave { 50% { transform: translateY(-4px); } }
+
+#top { top: calc(14px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); display: grid; gap: 8px; justify-items: center; width: min(560px, calc(100% - 32px)); }
+#count { display: flex; align-items: center; gap: 10px; padding: 7px 14px 7px 12px; border-radius: 999px; font-weight: 800; font-size: 14px; font-variant-numeric: tabular-nums; }
+#count b { font-family: var(--mono); font-size: 16px; }
+.live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--go); box-shadow: 0 0 0 0 rgba(52,211,153,.6); animation: ping 1.6s infinite; }
+@keyframes ping { 0% { box-shadow: 0 0 0 0 rgba(52,211,153,.6); } 70%, 100% { box-shadow: 0 0 0 8px rgba(52,211,153,0); } }
+#status { font-size: 15px; font-weight: 700; padding: 8px 16px; border-radius: 999px; font-variant-numeric: tabular-nums; text-align: center; text-wrap: balance; }
+#status.lead { background: linear-gradient(180deg, #ffe08a, var(--crown)); color: #2a1a00; border-color: transparent; box-shadow: 0 8px 30px rgba(255,201,60,.35); }
+
+#board { top: calc(16px + env(safe-area-inset-top, 0px)); right: 16px; padding: 12px 14px; width: 190px; font-size: 13px; display: grid; gap: 8px; }
+#board ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 7px; }
+#board li { display: grid; grid-template-columns: 14px 1fr auto; gap: 8px; align-items: center; font-variant-numeric: tabular-nums; font-weight: 600; }
+#board li .orb { width: 12px; height: 12px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff9, transparent 50%), var(--c); }
+#board li .bar { grid-column: 2 / 4; height: 3px; border-radius: 3px; background: rgba(160,190,220,.12); margin-top: -3px; overflow: hidden; }
+#board li .bar i { display: block; height: 100%; background: var(--c); border-radius: 3px; }
+#board li.mine { color: var(--you); font-weight: 800; }
+#board li .n { font-family: var(--mono); }
+
+#toasts { top: calc(110px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); display: grid; gap: 8px; justify-items: center; width: min(460px, calc(100% - 32px)); }
+.toast { padding: 9px 16px; border-radius: 999px; font-weight: 800; font-size: 14.5px; animation: pop .3s cubic-bezier(.2, 1.4, .4, 1), fade .5s ease-in 2.6s forwards; text-align: center; }
+.toast.gold { background: linear-gradient(180deg, #ffe08a, var(--crown)); color: #2a1a00; border-color: transparent; }
+@keyframes pop { from { transform: scale(.7) translateY(-6px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes fade { to { opacity: 0; transform: translateY(-8px); } }
+
+/* Bottom stack: spotlight hero + race bar */
+#bottom { bottom: calc(16px + env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%); display: grid; gap: 10px; pointer-events: auto; width: min(480px, calc(100% - 24px)); }
+
+.spot { position: relative; border-radius: 22px; padding: 2.5px; background: conic-gradient(from var(--ang), var(--crown), var(--you), var(--bolt), var(--crown)); animation: spin 4s linear infinite; box-shadow: 0 0 40px rgba(255, 201, 60, .28), 0 18px 50px rgba(0, 0, 0, .55); }
+@keyframes spin { to { --ang: 360deg; } }
+.spot::after { content: ""; position: absolute; inset: -30px -10px auto; height: 60px; background: radial-gradient(ellipse at center, rgba(255, 201, 60, .35), transparent 70%); pointer-events: none; z-index: -1; }
+.spot-inner { position: relative; border-radius: 20px; padding: 12px 14px 14px; background: radial-gradient(120% 140% at 0% 0%, #2a2440 0%, #151d31 45%, #0f1626 100%); overflow: hidden; display: grid; gap: 10px; }
+.spot-inner::before { content: ""; position: absolute; inset: 0; background: linear-gradient(115deg, transparent 35%, rgba(255,255,255,.08) 50%, transparent 65%); transform: translateX(-100%); animation: sheen 5s ease-in-out infinite; pointer-events: none; }
+@keyframes sheen { 0%, 60% { transform: translateX(-100%); } 85%, 100% { transform: translateX(100%); } }
+.spot-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.tag { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 900; letter-spacing: .16em; text-transform: uppercase; color: var(--crown); }
+.tag::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--stop); box-shadow: 0 0 8px var(--stop); animation: blink 1.2s steps(2) infinite; }
+@keyframes blink { 50% { opacity: .3; } }
+.spot-time { font-family: var(--mono); font-weight: 700; font-size: 14px; color: var(--ink); background: rgba(255,255,255,.07); padding: 3px 9px; border-radius: 999px; font-variant-numeric: tabular-nums; }
+.spot-main { display: grid; grid-template-columns: 64px 1fr auto; gap: 14px; align-items: center; }
+.ava { position: relative; width: 64px; height: 64px; }
+.ava svg { position: absolute; inset: 0; transform: rotate(-90deg); }
+.ava .trk { fill: none; stroke: rgba(255,255,255,.1); stroke-width: 4; }
+.ava .prog { fill: none; stroke: var(--crown); stroke-width: 4; stroke-linecap: round; stroke-dasharray: 182.2; transition: stroke-dashoffset .2s linear; filter: drop-shadow(0 0 4px rgba(255,201,60,.6)); }
+.face { position: absolute; inset: 7px; border-radius: 50%; display: grid; place-items: center; font-family: var(--display); font-size: 24px; color: rgba(10, 16, 28, .85); background: radial-gradient(circle at 35% 28%, rgba(255,255,255,.7), transparent 42%), var(--c, #888); box-shadow: inset 0 -4px 8px rgba(0,0,0,.25); }
+.ava .crownico { position: absolute; left: 50%; top: -13px; width: 30px; transform: translateX(-50%) rotate(-8deg); filter: drop-shadow(0 2px 3px rgba(0,0,0,.5)); animation: bob 2s ease-in-out infinite; }
+@keyframes bob { 50% { transform: translateX(-50%) rotate(-8deg) translateY(-2px); } }
+.who { min-width: 0; display: grid; gap: 4px; }
+.who .h { font-family: var(--display); font-size: 22px; line-height: 1.05; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.who .sub { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); font-weight: 600; font-variant-numeric: tabular-nums; }
+.plat { font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 999px; color: #fff; background: #555; }
+[data-plat="ig"] { background: linear-gradient(45deg, #f58529, #dd2a7b 55%, #8134af); color: #fff; }
+[data-plat="tt"] { background: #0b0b0f; color: #fff; box-shadow: -1.5px -1.5px 0 #25f4ee, 1.5px 1.5px 0 #fe2c55; }
+[data-plat="x"] { background: #eef2f5; color: #0b0f14; }
+[data-plat="yt"] { background: #ff0033; color: #fff; }
+[data-plat="tw"] { background: #9146ff; color: #fff; }
+.follow { font: inherit; font-weight: 900; font-size: 15px; padding: 12px 18px; border-radius: 14px; border: 0; cursor: pointer; box-shadow: 0 6px 18px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.25); transition: transform .12s; }
+.follow:hover { transform: translateY(-1px) scale(1.03); }
+.follow:active { transform: scale(.97); }
+.opens { text-align: right; line-height: 1; }
+.opens b { display: block; font-family: var(--display); font-weight: 400; font-size: 34px; color: var(--crown); text-shadow: 0 0 18px rgba(255,201,60,.5); }
+.opens small { font-size: 11px; color: var(--muted); font-weight: 700; }
+.spot.me { background: conic-gradient(from var(--ang), var(--crown), #fff3c4, var(--crown-deep), var(--crown)); box-shadow: 0 0 60px rgba(255, 201, 60, .45), 0 18px 50px rgba(0, 0, 0, .55); }
+.spot.me .h { color: var(--crown); }
+.spot.flash { animation: spin 4s linear infinite, newhead .7s cubic-bezier(.2, 1.4, .4, 1); }
+@keyframes newhead { 0% { transform: scale(.92); filter: brightness(2); } 60% { transform: scale(1.03); } 100% { transform: none; filter: none; } }
+
+#bottom > * { min-width: 0; }
+.racebar { display: grid; gap: 8px; padding: 10px 10px 10px 14px; border-radius: 18px; font-size: 13px; font-weight: 700; cursor: pointer; min-width: 0; }
+.rb-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; min-width: 0; }
+.racebar .rb-txt { font-variant-numeric: tabular-nums; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.racebar ol { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.racebar li { display: grid; gap: 1px; padding: 6px 9px; border-radius: 12px; background: rgba(255,255,255,.06); border: 1px solid transparent; font-size: 12.5px; min-width: 0; font-variant-numeric: tabular-nums; }
+.racebar li .pos { font-size: 10px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.racebar li .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 800; }
+.racebar li .ms { font-family: var(--mono); font-size: 11.5px; color: var(--muted); min-height: 1.2em; }
+.racebar li.first { background: rgba(255,201,60,.14); border-color: rgba(255,201,60,.35); }
+.racebar li.first .pos, .racebar li.first .nm { color: var(--crown); }
+.racebar li.mine { background: rgba(255,95,162,.16); border-color: rgba(255,95,162,.4); }
+.racebar li.mine .nm, .racebar li.mine .pos { color: var(--you); }
+.racebar li.slot { opacity: .45; }
+.racebar li.empty { grid-column: 1 / -1; background: none; padding: 0; color: var(--muted); font-weight: 600; }
+.racebar.live { border-color: rgba(244,63,94,.6); box-shadow: 0 0 0 1px rgba(244,63,94,.3), 0 0 30px rgba(244,63,94,.25); }
+.racebar.live .rb-txt { color: #ff8095; }
+.iconbtn { flex: none; font: inherit; font-weight: 800; font-size: 13px; color: var(--ink); background: rgba(255,255,255,.08); border: 1px solid var(--line); border-radius: 999px; padding: 7px 12px; cursor: pointer; }
+.iconbtn:hover { background: rgba(255,255,255,.14); }
+
+/* Peek (tap a bead) */
+#peek { position: fixed; z-index: 3; width: 260px; padding: 10px 12px; display: grid; grid-template-columns: 40px 1fr auto; gap: 10px; align-items: center; pointer-events: auto; }
+#peek .face { position: relative; inset: auto; width: 40px; height: 40px; font-size: 17px; }
+#peek .h { font-weight: 800; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#peek .follow { padding: 8px 12px; font-size: 13px; border-radius: 11px; }
+
+#mock { bottom: calc(16px + env(safe-area-inset-bottom, 0px)); left: 16px; padding: 10px 12px; pointer-events: auto; max-width: 230px; display: grid; gap: 8px; }
+#mock .row { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font: inherit; background: rgba(255,255,255,.07); color: var(--ink); font-weight: 700; font-size: 12px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; cursor: pointer; }
+.chip:hover { background: rgba(255,255,255,.14); }
+#mini { bottom: calc(16px + env(safe-area-inset-bottom, 0px)); right: 16px; width: 140px; height: 140px; border-radius: 50%; padding: 0; }
+
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid var(--crown); outline-offset: 2px; }
+
+/* Landing */
+#intro { position: fixed; inset: 0; z-index: 5; display: grid; place-items: center; padding: 16px; overflow-y: auto; background: radial-gradient(ellipse at center, rgba(7, 13, 24, .25), rgba(7, 13, 24, .88) 70%); }
+#intro .wrap { text-align: center; display: grid; gap: 16px; justify-items: center; max-width: 540px; }
+#intro .beads i { width: 16px; height: 16px; }
+#intro .beads { gap: 3px; }
+#intro h1 { font-family: var(--display); font-weight: 400; font-size: clamp(56px, 13vw, 112px); line-height: .88; margin: 0; letter-spacing: -.01em; text-shadow: 0 4px 0 rgba(0,0,0,.35), 0 10px 50px rgba(255, 95, 162, .25); }
+#intro h1 span { color: var(--you); display: inline-block; animation: wiggle 2.4s ease-in-out infinite; }
+@keyframes wiggle { 0%, 80%, 100% { transform: rotate(0); } 85% { transform: rotate(-6deg); } 90% { transform: rotate(5deg); } 95% { transform: rotate(-3deg); } }
+#intro p { margin: 0; font-size: 17px; line-height: 1.5; max-width: 44ch; text-wrap: balance; color: #d6e2ec; }
+#intro .live { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+#intro .live b { color: var(--ink); font-family: var(--mono); }
+#joinForm { display: grid; gap: 10px; width: min(400px, 100%); padding: 16px; }
+#joinForm .fields { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+#joinForm label { font-size: 13px; color: var(--muted); text-align: left; font-weight: 700; }
+input[type="file"] { font-size: 13px; padding: 9px; color: var(--muted); }
+input[type="file"]::file-selector-button { font: inherit; font-weight: 800; color: var(--ink); background: rgba(255,255,255,.1); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; margin-right: 10px; cursor: pointer; }
+input, select { font: inherit; font-size: 16px; color: var(--ink); background: rgba(7, 13, 24, .8); border: 1px solid var(--line); border-radius: 12px; padding: 12px; min-width: 0; user-select: text; -webkit-user-select: text; }
+.cta { font: inherit; font-family: var(--display); font-size: 22px; color: #2a0614; background: linear-gradient(180deg, #ff8cc0, var(--you)); border: 0; border-radius: 16px; padding: 14px 24px; cursor: pointer; box-shadow: 0 6px 0 #b8336f, 0 14px 30px rgba(255, 95, 162, .4); transition: transform .1s, box-shadow .1s; }
+.cta:hover { transform: translateY(-1px); }
+.cta:active { transform: translateY(5px); box-shadow: 0 1px 0 #b8336f, 0 6px 16px rgba(255, 95, 162, .4); }
+#intro small { color: var(--muted); font-size: 12px; }
+
+/* Race */
+#duel { position: fixed; inset: 0; z-index: 6; display: grid; place-items: center; padding: 16px; background: radial-gradient(ellipse at center, rgba(7,13,24,.55), rgba(7,13,24,.85)); }
+#duel .box { width: min(400px, 100%); padding: 22px; display: grid; gap: 14px; justify-items: center; text-align: center; border-radius: 24px; }
+#duel h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 30px; line-height: 1.05; }
+#duel p { margin: 0; color: var(--muted); font-size: 14px; max-width: 34ch; }
+#pad { width: 210px; height: 210px; border-radius: 50%; border: 0; cursor: pointer; font-family: var(--display); font-size: 26px; color: #fff; background: radial-gradient(circle at 35% 28%, #ff9aab, #e11d48 55%, #881337); box-shadow: 0 0 0 10px rgba(244,63,94,.12), 0 0 0 22px rgba(244,63,94,.06), 0 24px 50px rgba(225,29,72,.35), inset 0 -10px 24px rgba(0,0,0,.3); animation: breathe 1.2s ease-in-out infinite; }
+@keyframes breathe { 50% { box-shadow: 0 0 0 16px rgba(244,63,94,.12), 0 0 0 30px rgba(244,63,94,.05), 0 24px 50px rgba(225,29,72,.35), inset 0 -10px 24px rgba(0,0,0,.3); } }
+#pad.go { color: #032b1c; font-size: 40px; background: radial-gradient(circle at 35% 28%, #b5ffe0, #34d399 55%, #047857); box-shadow: 0 0 0 14px rgba(52,211,153,.2), 0 0 0 30px rgba(52,211,153,.08), 0 24px 60px rgba(52,211,153,.45), inset 0 -10px 24px rgba(0,0,0,.2); animation: none; transform: scale(1.04); }
+#pad.done { background: radial-gradient(circle at 35% 28%, #3a4a66, #1c2740); box-shadow: inset 0 -10px 24px rgba(0,0,0,.3); animation: none; font-size: 30px; }
+#duelResult { font-weight: 800; font-size: 16px; min-height: 1.4em; font-variant-numeric: tabular-nums; }
+
+[hidden] { display: none !important; }
+/* Share card */
+#shareModal { position: fixed; inset: 0; z-index: 7; display: grid; place-items: center; padding: 16px; background: rgba(4, 8, 16, .78); }
+#shareModal .box { width: min(440px, 100%); max-height: calc(100% - 8px); overflow-y: auto; padding: 16px; display: grid; gap: 12px; border-radius: 22px; }
+.sm-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.sm-head h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 24px; }
+#shareImg { width: 100%; aspect-ratio: 4 / 5; border-radius: 14px; box-shadow: 0 16px 40px rgba(0,0,0,.5); background: #f3ece0; user-select: auto; -webkit-user-select: auto; -webkit-touch-callout: default; }
+#caption { font: inherit; font-size: 15px; line-height: 1.45; color: var(--ink); background: rgba(7, 13, 24, .8); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; resize: none; user-select: text; -webkit-user-select: text; }
+.sm-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.cta.sm { font-size: 17px; padding: 10px 18px; border-radius: 13px; box-shadow: 0 4px 0 #b8336f, 0 10px 20px rgba(255, 95, 162, .35); }
+.themes { display: flex; gap: 8px; }
+.theme { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; font: 800 14px var(--body, Figtree), system-ui; color: var(--ink); background: rgba(255,255,255,.05); border: 1px solid var(--line); border-radius: 999px; padding: 8px 10px; cursor: pointer; }
+.theme i { width: 16px; height: 16px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(255,255,255,.25); }
+.theme[aria-pressed="true"] { border-color: var(--you); background: rgba(255,95,162,.14); }
+.sm-note { margin: 0; font-size: 12px; color: var(--muted); }
+
+@media (max-width: 640px) {
+  #board, #brand { display: none; }
+  #mini { width: 86px; height: 86px; bottom: auto; top: calc(104px + env(safe-area-inset-top, 0px)); right: 12px; }
+  #mock { bottom: auto; top: calc(104px + env(safe-area-inset-top, 0px)); left: 12px; max-width: calc(100% - 120px); padding: 8px; }
+  #mock .label { display: none; }
+  #toasts { top: calc(196px + env(safe-area-inset-top, 0px)); }
+  .spot-main { grid-template-columns: 56px 1fr auto; gap: 10px; }
+  .ava { width: 56px; height: 56px; }
+  .who .h { font-size: 19px; }
+  .follow { padding: 11px 14px; font-size: 14px; }
+  .racebar li { padding: 5px 7px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast, .live-dot, .beads i, .spot, .spot-inner::before, #intro h1 span, #pad, .ava .crownico, .tag::before { animation: none !important; }
+}
+</style>
+
+<canvas id="game" aria-label="Live snake arena"></canvas>
+
+<div class="hud" id="brand"><span class="beads" aria-hidden="true"><i style="--c:#ff5fa2;--d:0"></i><i style="--c:#ffc93c;--d:1"></i><i style="--c:#7dd3fc;--d:2"></i><i style="--c:#a78bfa;--d:3"></i></span>plsfollow<span>.me</span></div>
+
+<div class="hud" id="top">
+  <div id="count" class="glass"><span class="live-dot"></span><span><b id="n">0</b> <span id="countTail">playing</span></span></div>
+  <div id="status" class="glass" hidden></div>
+</div>
+
+<div class="hud glass" id="board">
+  <h2 class="label">Snakes right now</h2>
+  <ol id="boardList"></ol>
+</div>
+
+<div class="hud" id="toasts" aria-live="polite"></div>
+
+<div class="hud" id="bottom" hidden>
+  <section class="spot" id="spot" aria-label="Now leading">
+    <div class="spot-inner">
+      <div class="spot-top">
+        <span class="tag" id="spotTag">Now leading</span>
+        <span class="spot-time" id="spotTime">0:30</span>
+      </div>
+      <div class="spot-main">
+        <div class="ava">
+          <svg viewBox="0 0 64 64" aria-hidden="true"><circle class="trk" cx="32" cy="32" r="29"/><circle class="prog" id="spotProg" cx="32" cy="32" r="29"/></svg>
+          <div class="face" id="spotAva">?</div>
+          <svg class="crownico" viewBox="0 0 30 20" aria-hidden="true">
+            <defs><linearGradient id="cg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff1a8"/><stop offset=".5" stop-color="#ffc93c"/><stop offset="1" stop-color="#e09a12"/></linearGradient></defs>
+            <path d="M3 16 L1.5 4 L9 10 L15 1 L21 10 L28.5 4 L27 16 Z" fill="url(#cg)" stroke="#7a4d00" stroke-width="1.2" stroke-linejoin="round"/>
+            <rect x="3" y="14.5" width="24" height="3.5" rx="1" fill="#e09a12" stroke="#7a4d00" stroke-width="1"/>
+            <circle cx="15" cy="2" r="1.8" fill="#ff5fa2"/><circle cx="1.8" cy="4" r="1.5" fill="#7dd3fc"/><circle cx="28.2" cy="4" r="1.5" fill="#7dd3fc"/>
+          </svg>
+        </div>
+        <div class="who">
+          <div class="h" id="spotHandle"></div>
+          <div class="sub"><span class="plat" id="spotPlat" data-plat="ig">Instagram</span><span id="spotSub"></span></div>
+        </div>
+        <button class="follow" id="spotFollow" data-plat="ig">Follow</button>
+        <div class="opens" id="spotOpens" hidden><b id="spotOpensN">0</b><small>profile opens</small></div>
+      </div>
+    </div>
+  </section>
+  <div class="racebar glass" id="race" title="Race for next head">
+    <div class="rb-head">
+      <span class="rb-txt" id="raceCloses">⚔️ Race starts in 0:20</span>
+      <button class="iconbtn" id="share">↗ Share my spot</button>
+    </div>
+    <ol id="raceList"></ol>
+  </div>
+</div>
+
+<div class="glass" id="peek" hidden>
+  <div class="face" id="peekAva">?</div>
+  <div class="who"><div class="h" id="peekHandle"></div><div class="sub"><span class="plat" id="peekPlat" data-plat="ig">Instagram</span></div></div>
+  <button class="follow" id="peekFollow" data-plat="ig">Follow</button>
+</div>
+
+<div class="hud glass" id="mock" hidden>
+  <h2 class="label">Mockup controls</h2>
+  <div class="row">
+    <button class="chip" id="skip">Make me head now</button>
+    <button class="chip" id="endTurn">Start the race now</button>
+    <button class="chip" id="bite">Make it bite itself</button>
+    <button class="chip" id="crowd">+50 people</button>
+  </div>
+</div>
+
+<canvas class="hud glass" id="mini" width="280" height="280" aria-label="Minimap"></canvas>
+
+<div id="intro">
+  <div class="wrap">
+    <span class="beads" aria-hidden="true"><i style="--c:#ff5fa2;--d:0"></i><i style="--c:#ffc93c;--d:1"></i><i style="--c:#34d399;--d:2"></i><i style="--c:#7dd3fc;--d:3"></i><i style="--c:#a78bfa;--d:4"></i><i style="--c:#fb923c;--d:5"></i><i style="--c:#f472b6;--d:6"></i></span>
+    <h1>pls follow <span>me</span></h1>
+    <p>One giant snake made of strangers. Each head leads for 30 seconds. In the last 10, everyone races to be next, and while you lead, the whole snake sees your profile.</p>
+    <div class="live"><span class="live-dot"></span><span><b id="introN">0</b> strangers are in the snake right now</span></div>
+    <form id="joinForm" class="glass">
+      <label for="handle">Your handle (optional)</label>
+      <div class="fields">
+        <input id="handle" name="handle" placeholder="@yourname" autocomplete="off" maxlength="30">
+        <select id="platform" name="platform" aria-label="Platform">
+          <option value="ig">Instagram</option>
+          <option value="tt">TikTok</option>
+          <option value="x">X</option>
+          <option value="yt">YouTube</option>
+          <option value="tw">Twitch</option>
+        </select>
+      </div>
+      <label for="photo">Profile photo (optional, shown when you're the head)</label>
+      <input id="photo" name="photo" type="file" accept="image/*">
+      <button class="cta" type="submit">Join the tail</button>
+    </form>
+    <small>Mockup: every other player is simulated.</small>
+  </div>
+</div>
+
+<div id="shareModal" hidden>
+  <div class="box glass" role="dialog" aria-modal="true" aria-labelledby="shareTitle">
+    <div class="sm-head"><h2 id="shareTitle">Share your spot</h2><button class="iconbtn" id="shareClose" aria-label="Close">✕</button></div>
+    <img id="shareImg" alt="Your plsfollow.me share card">
+    <div id="shareThemes" class="themes" role="group" aria-label="Card style">
+      <button class="theme" data-theme="cream" aria-pressed="true"><i style="background:linear-gradient(135deg,#f7c6b0,#d9c8ef)"></i>Cream</button>
+      <button class="theme" data-theme="blush" aria-pressed="false"><i style="background:linear-gradient(135deg,#ffbfd0,#ffe0b0)"></i>Blush</button>
+      <button class="theme" data-theme="midnight" aria-pressed="false"><i style="background:linear-gradient(135deg,#4a2f6e,#14111c)"></i>Midnight</button>
+    </div>
+    <label class="label" for="caption">Caption</label>
+    <textarea id="caption" rows="3"></textarea>
+    <div class="sm-actions">
+      <button class="cta sm" id="nativeShare">Share…</button>
+      <button class="iconbtn" id="saveImg">⬇ Save image</button>
+      <button class="iconbtn" id="copyCap">Copy caption</button>
+    </div>
+    <p class="sm-note">Made for Instagram Stories, TikTok and X (1080 × 1350).</p>
+  </div>
+</div>
+
+<div id="duel" hidden>
+  <div class="box glass">
+    <span class="label">Last 10 seconds</span>
+    <h2>Race for next head</h2>
+    <p id="duelHint"></p>
+    <button id="pad">Get ready…</button>
+    <div id="duelResult" aria-live="assertive"></div>
+  </div>
+</div>
+
+<script>
+(() => {
+  // ---------- Tuning ----------
+  const ARENA_R = 1300, SPEED = 190, TURN = 4.6, SPACING = 21, R = 10.5, HEAD_R = 21, HIT = 22, SELF_SKIP = 10;
+  const LEAD_MS = 30000, RACE_MS = 10000;
+  const GRACE_MS = 1500, BOOST_MS = 3000, BOOST = 1.6;
+  const PLAT = { ig: 'Instagram', tt: 'TikTok', x: 'X', yt: 'YouTube', tw: 'Twitch' };
+  const TAU = Math.PI * 2;
+
+  const cv = document.getElementById('game'), ctx = cv.getContext('2d');
+  const mini = document.getElementById('mini'), mctx = mini.getContext('2d');
+  const $ = id => document.getElementById(id);
+  let W = 0, H = 0, DPR = 1;
+  function resize() { DPR = Math.min(2, window.devicePixelRatio || 1); W = innerWidth; H = innerHeight; cv.width = W * DPR; cv.height = H * DPR; }
+  resize(); addEventListener('resize', resize);
+
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const pick = a => a[Math.floor(Math.random() * a.length)];
+  const ADJ = ['sunny', 'pixel', 'midnight', 'lofi', 'tiny', 'cosmic', 'salty', 'mellow', 'neon', 'lazy', 'spicy', 'velvet', 'feral', 'cozy'];
+  const NOUN = ['mango', 'otter', 'pancake', 'comet', 'noodle', 'fern', 'biscuit', 'radio', 'moth', 'taco', 'pebble', 'dune', 'gecko', 'waffle'];
+  const fakeHandle = () => Math.random() < 0.25 ? null : pick(ADJ) + pick(['.', '_', '']) + pick(NOUN) + (Math.random() < 0.4 ? Math.floor(rand(1, 99)) : '');
+
+  // ---------- Sprites (pre-rendered once, drawn many times) ----------
+  const cache = new Map();
+  function sprite(key, size, paint) {
+    let c = cache.get(key);
+    if (!c) { c = document.createElement('canvas'); c.width = c.height = size; paint(c.getContext('2d'), size); cache.set(key, c); }
+    return c;
+  }
+  // Glossy candy bead
+  const bead = (hue, sat = 88, lit = 60) => sprite(`b${hue}|${sat}|${lit}`, 72, (g, S) => {
+    const c = S / 2, r = S / 2 - 2;
+    const grd = g.createRadialGradient(c - r * .3, c - r * .35, r * .05, c, c, r);
+    grd.addColorStop(0, `hsl(${hue},${sat}%,${Math.min(96, lit + 28)}%)`);
+    grd.addColorStop(.5, `hsl(${hue},${sat}%,${lit}%)`);
+    grd.addColorStop(1, `hsl(${hue},${sat}%,${Math.max(10, lit - 26)}%)`);
+    g.fillStyle = grd; g.beginPath(); g.arc(c, c, r, 0, TAU); g.fill();
+    g.strokeStyle = `hsla(${hue},100%,88%,.45)`; g.lineWidth = 2.5;
+    g.beginPath(); g.arc(c, c, r - 3, Math.PI * .25, Math.PI * .75); g.stroke();
+    g.fillStyle = 'rgba(255,255,255,.7)';
+    g.beginPath(); g.ellipse(c - r * .32, c - r * .42, r * .3, r * .15, -.55, 0, TAU); g.fill();
+    g.fillStyle = 'rgba(255,255,255,.9)';
+    g.beginPath(); g.arc(c - r * .05, c - r * .55, r * .06, 0, TAU); g.fill();
+  });
+  const glow = (rgb) => sprite(`g${rgb}`, 128, (g, S) => {
+    const grd = g.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+    grd.addColorStop(0, `rgba(${rgb},.9)`); grd.addColorStop(.35, `rgba(${rgb},.35)`); grd.addColorStop(1, `rgba(${rgb},0)`);
+    g.fillStyle = grd; g.fillRect(0, 0, S, S);
+  });
+  const hueOf = p => Math.round(p.hue / 12) * 12;
+  // Avatars bake in the display font, so re-render them once it has loaded
+  if (document.fonts) document.fonts.ready.then(() => { for (const k of [...cache.keys()]) if (k[0] === 'a') cache.delete(k); });
+
+  // ---------- World ----------
+  let pidSeq = 1, sidSeq = 1, now = performance.now();
+  const snakes = [];
+  let me = null, joined = false, duel = null, spotStats = null, lastHeadPid = 0;
+  const shake = { a: 0 };
+  const stats = { led: 0, opens: 0, best: 0, biggestLed: 0 }; // for the share card
+
+  const segment = (x, y) => ({ pid: pidSeq++, x, y, angle: 0, target: 0, wob: 0, hue: (pidSeq * 137.508) % 360, handle: fakeHandle(), platform: pick(Object.keys(PLAT)), blink: rand(0, 4000) });
+  const name = p => p === me ? 'You' : p.handle ? '@' + p.handle : 'Anonymous';
+
+  function makeSnake(members) {
+    const s = { id: sidSeq++, members, grace: now + GRACE_MS, hue: (sidSeq * 83 + 190) % 360 };
+    snakes.push(s); promote(s); return s;
+  }
+  function spawnLine(n, x, y, ang) {
+    const m = [];
+    for (let i = 0; i < n; i++) m.push(segment(x - Math.cos(ang) * i * SPACING, y - Math.sin(ang) * i * SPACING));
+    m[0].angle = m[0].target = ang;
+    return makeSnake(m);
+  }
+  const snakeOf = p => snakes.find(s => s.members.includes(p));
+  const mySnake = () => (me && joined ? snakeOf(me) : null);
+  const biggest = () => snakes.reduce((a, b) => (b.members.length > a.members.length ? b : a));
+  const raceLive = s => now >= s.leaderSince + LEAD_MS - RACE_MS;
+  const raceRanked = s => s.race.entries.filter(e => e.ms > 0 && now >= e.at && s.members.includes(e.p) && e.p !== s.members[0]).sort((a, b) => a.ms - b.ms);
+
+  function promote(s) {
+    const h = s.members[0], n = s.members[1];
+    if (n) h.angle = Math.atan2(h.y - n.y, h.x - n.x);
+    h.target = h.angle; h.force = null;
+    s.leaderSince = now; s.boostUntil = 0;
+    s.race = { entries: [], started: false, goAt: now + LEAD_MS - RACE_MS + rand(2000, 6000) };
+    if (spotStats && h !== me && spotStats.snake === s) endSpotlight();
+    if (h === me) startSpotlight(s);
+  }
+  function startSpotlight(s) {
+    spotStats = { snake: s, opens: 0, shown: s.members.length - 1, nextPing: now + rand(1500, 2500) };
+    stats.led++; stats.biggestLed = Math.max(stats.biggestLed, s.members.length);
+    toast('👑 You are the head for 30s. The whole snake sees your profile!', true);
+    confetti(me.x, me.y, 46); shake.a = 10;
+  }
+  function endSpotlight() {
+    const st = spotStats; spotStats = null;
+    stats.opens += st.opens;
+    if (me.handle) toast(`Your turn: shown to ${st.shown} people · ${st.opens} opened your ${PLAT[me.platform]}`);
+  }
+  function endTurn(s) {
+    const m = s.members, old = m[0];
+    if (m.length < 2) { promote(s); return; }
+    const winner = raceRanked(s)[0];
+    m.shift(); m.push(old);
+    if (winner) { m.splice(m.indexOf(winner.p), 1); m.unshift(winner.p); }
+    promote(s);
+    if (m[0] !== me) confetti(m[0].x, m[0].y, 22);
+    if (mySnake() !== s) return;
+    if (old === me) toast('Your 30 seconds are up. Back to the tail!');
+    if (winner && winner.p !== me) toast(`⚔️ ${name(winner.p)} won the race in ${winner.ms} ms and is the new head`);
+  }
+
+  spawnLine(64, 600, 0, Math.PI);
+  spawnLine(20, -260, 720, 0.3);
+  spawnLine(9, 340, -800, 2.2);
+
+  const bolts = Array.from({ length: 8 }, () => spawnBolt());
+  function spawnBolt() { const a = rand(0, TAU), r = Math.sqrt(Math.random()) * ARENA_R * 0.85; return { x: Math.cos(a) * r, y: Math.sin(a) * r, ph: rand(0, TAU) }; }
+  const motes = Array.from({ length: 90 }, () => { const a = rand(0, TAU), r = Math.sqrt(Math.random()) * ARENA_R; return { x: Math.cos(a) * r, y: Math.sin(a) * r, s: rand(1, 2.6), ph: rand(0, TAU) }; });
+
+  // ---------- Particles ----------
+  const parts = [];
+  function burst(x, y, n, colors, { speed = 260, life = 800, size = 4, grav = 0, drag = 0.92 } = {}) {
+    for (let i = 0; i < n; i++) {
+      const a = rand(0, TAU), v = rand(.35, 1) * speed;
+      parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life, max: life, size: rand(.6, 1.2) * size, color: pick(colors), grav, drag, rot: rand(0, TAU), vr: rand(-8, 8), sq: Math.random() < .5 });
+    }
+  }
+  const confetti = (x, y, n) => burst(x, y, n, ['#ffc93c', '#ff5fa2', '#7dd3fc', '#a78bfa', '#34d399', '#fff'], { speed: 360, life: 1200, size: 6, grav: 260, drag: .95 });
+  function stepParts(dt) {
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const p = parts[i];
+      p.life -= dt * 1000; if (p.life <= 0) { parts.splice(i, 1); continue; }
+      p.vx *= Math.pow(p.drag, dt * 60); p.vy = p.vy * Math.pow(p.drag, dt * 60) + p.grav * dt;
+      p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt;
+    }
+  }
+
+  // ---------- Input ----------
+  let pointer = null; const keys = {};
+  addEventListener('pointermove', e => { pointer = { x: e.clientX, y: e.clientY }; });
+  cv.addEventListener('pointerdown', e => {
+    pointer = { x: e.clientX, y: e.clientY };
+    const s = mySnake();
+    if (!s || s.members[0] !== me) peekAt(e.clientX, e.clientY);
+  });
+  addEventListener('keydown', e => { keys[e.key] = true; if (duel && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); padPress(); } });
+  addEventListener('keyup', e => { keys[e.key] = false; });
+
+  const cam = { x: 0, y: 0, z: 1 };
+  const toScreen = (x, y) => ({ x: (x - cam.x) * cam.z + W / 2, y: (y - cam.y) * cam.z + H / 2 });
+
+  function steerMe(h, dt) {
+    if (keys.ArrowLeft || keys.a) { h.target = h.angle - 10 * dt; pointer = null; return; }
+    if (keys.ArrowRight || keys.d) { h.target = h.angle + 10 * dt; pointer = null; return; }
+    if (!pointer) return;
+    const s = toScreen(h.x, h.y);
+    if (Math.hypot(pointer.x - s.x, pointer.y - s.y) > 8) h.target = Math.atan2(pointer.y - s.y, pointer.x - s.x);
+  }
+  function wander(h) {
+    if (h.force && now < h.forceUntil) { h.target = Math.atan2(h.force.y - h.y, h.force.x - h.x); return; }
+    h.wob = h.wob * 0.96 + (Math.random() - 0.5) * 0.35;
+    h.target = h.angle + h.wob;
+    let best = null, bd = 340;
+    for (const b of bolts) { const d = Math.hypot(b.x - h.x, b.y - h.y); if (d < bd) { bd = d; best = b; } }
+    if (best) h.target = Math.atan2(best.y - h.y, best.x - h.x) + h.wob * 0.3;
+    if (Math.hypot(h.x, h.y) > ARENA_R * 0.72) h.target = Math.atan2(-h.y, -h.x) + h.wob * 0.3;
+  }
+
+  function startRace(s) {
+    const r = s.race; r.started = true;
+    const m = s.members.slice(1).filter(p => p !== me);
+    for (let i = 0; i < Math.min(m.length, 12); i++) {
+      const p = pick(m), ms = Math.random() < 0.15 ? -1 : Math.round(rand(205, 460));
+      if (!r.entries.some(e => e.p === p)) r.entries.push({ p, ms, at: r.goAt + Math.max(0, ms) });
+    }
+    if (mySnake() === s && s.members[0] !== me && !duel) openRace(s);
+  }
+
+  // ---------- Simulation ----------
+  function update(dt) {
+    for (const s of snakes.slice()) {
+      if (now - s.leaderSince > LEAD_MS) endTurn(s);
+      else if (raceLive(s) && !s.race.started) startRace(s);
+    }
+    for (const s of snakes) {
+      const m = s.members, h = m[0], boosting = now < s.boostUntil, sp = SPEED * (boosting ? BOOST : 1);
+      if (h === me && joined) steerMe(h, dt); else wander(h);
+      let d = h.target - h.angle; d = Math.atan2(Math.sin(d), Math.cos(d));
+      const mt = TURN * dt; h.angle += Math.max(-mt, Math.min(mt, d));
+      h.x += Math.cos(h.angle) * sp * dt; h.y += Math.sin(h.angle) * sp * dt;
+      const r = Math.hypot(h.x, h.y);
+      if (r > ARENA_R) { h.x *= ARENA_R / r; h.y *= ARENA_R / r; }
+      for (let i = 1; i < m.length; i++) {
+        const a = m[i - 1], p = m[i], dx = a.x - p.x, dy = a.y - p.y, dist = Math.hypot(dx, dy);
+        if (dist > SPACING) { const mv = Math.min(dist - SPACING, SPEED * 2.5 * dt); p.x += dx / dist * mv; p.y += dy / dist * mv; }
+      }
+      if (boosting && Math.random() < .8) parts.push({ x: h.x - Math.cos(h.angle) * 14 + rand(-5, 5), y: h.y - Math.sin(h.angle) * 14 + rand(-5, 5), vx: -Math.cos(h.angle) * 60, vy: -Math.sin(h.angle) * 60, life: 420, max: 420, size: rand(3, 6), color: '#7dd3fc', grav: 0, drag: .9, rot: 0, vr: 0, sq: false });
+      for (let i = 0; i < bolts.length; i++) {
+        if (Math.hypot(bolts[i].x - h.x, bolts[i].y - h.y) < 28) {
+          burst(bolts[i].x, bolts[i].y, 26, ['#7dd3fc', '#e0f7ff', '#38bdf8'], { speed: 300, life: 600, size: 4 });
+          s.boostUntil = now + BOOST_MS; bolts[i] = spawnBolt();
+          if (h === me) { toast('⚡ Speed boost! Go steal someone.', true); shake.a = 6; }
+        }
+      }
+    }
+    collide();
+    stepParts(dt);
+    if (spotStats && now > spotStats.nextPing) pingOpens();
+  }
+
+  function collide() {
+    const touched = new Set(), mine = mySnake();
+    for (const s of snakes.slice()) {
+      if (touched.has(s) || now < s.grace) continue;
+      const h = s.members[0];
+      let hit = null;
+      for (const t of snakes) {
+        if (touched.has(t) || (t !== s && now < t.grace)) continue;
+        const m = t.members;
+        for (let k = t === s ? SELF_SKIP : 0; k < m.length; k++) {
+          const q = m[k];
+          if (Math.abs(q.x - h.x) < HIT && Math.abs(q.y - h.y) < HIT && Math.hypot(q.x - h.x, q.y - h.y) < HIT) { hit = { t, k }; break; }
+        }
+        if (hit) break;
+      }
+      if (!hit) continue;
+      touched.add(s); touched.add(hit.t);
+      const t = hit.t, at = t.members[hit.k];
+      if (t === s) {
+        const tail = s.members.splice(hit.k);
+        s.grace = now + GRACE_MS;
+        makeSnake(tail);
+        burst(at.x, at.y, 30, ['#ffffff', '#cfe8ff', '#ffc93c'], { speed: 340, life: 700, size: 5 });
+        if (mine === s) { shake.a = 12; toast(tail.includes(me) ? '💥 The snake bit itself. You are in a new snake!' : `💥 The snake bit itself and lost ${tail.length} people!`); }
+      } else if (hit.k === 0) {
+        const [win, lose] = s.members.length >= t.members.length ? [s, t] : [t, s];
+        const victim = lose.members.shift();
+        win.members.push(victim);
+        win.grace = lose.grace = now + GRACE_MS;
+        if (lose.members.length) promote(lose);
+        burst(h.x, h.y, 34, ['#fb923c', '#ffc93c', '#fff'], { speed: 380, life: 700, size: 5 });
+        if (victim === me) { if (spotStats) endSpotlight(); shake.a = 14; toast('🐍 Head-on crash! A bigger snake captured you.'); }
+        else if (mine === win) toast(`🥊 Head-on crash! Your snake captured ${name(victim)}`);
+        else if (mine === lose) { shake.a = 10; toast(`🥊 Your head ${name(victim)} got captured by a bigger snake!`); }
+      } else {
+        const tail = t.members.splice(hit.k);
+        s.members.push(...tail);
+        s.grace = now + 800;
+        burst(at.x, at.y, 30, ['#ff5fa2', '#ffc93c', '#fff'], { speed: 320, life: 750, size: 5 });
+        if (tail.includes(me)) { shake.a = 12; toast(`🫳 Another snake stole you (and ${tail.length - 1} others)!`); }
+        else if (mine === s) toast(`😈 Your snake stole ${tail.length} people!`);
+        else if (mine === t) { shake.a = 8; toast(`😱 Your snake lost ${tail.length} people to a thief!`); }
+      }
+    }
+    for (let i = snakes.length - 1; i >= 0; i--) if (!snakes[i].members.length) snakes.splice(i, 1);
+  }
+
+  function pingOpens() {
+    const st = spotStats; st.nextPing = now + rand(2000, 3500);
+    st.shown = Math.max(st.shown, st.snake.members.length - 1);
+    if (!me.handle) return;
+    const k = Math.random() < Math.min(0.9, st.shown / 60) ? 1 + Math.floor(Math.random() * Math.max(1, st.shown / 20)) : 0;
+    if (!k) return;
+    st.opens += k;
+    toast(`🔔 ${k} ${k > 1 ? 'people' : 'person'} opened your ${PLAT[me.platform]}`);
+    burst(me.x, me.y - 30, 10, ['#ffc93c', '#fff'], { speed: 160, life: 600, size: 3 });
+  }
+
+  // ---------- Race ----------
+  let padTimer = 0;
+  function openRace(s) {
+    duel = { snake: s, turn: s.leaderSince, state: 'wait' };
+    $('duelHint').textContent = 'Everyone in the snake is racing right now. Tap the moment it turns green. The fastest tap becomes the next head.';
+    $('duelResult').textContent = '';
+    const pad = $('pad'); pad.className = ''; pad.textContent = 'Get ready…'; pad.disabled = false;
+    $('duel').hidden = false; pad.focus();
+    padTimer = setTimeout(() => {
+      if (!duel) return;
+      duel.state = 'go'; duel.goAt = performance.now();
+      pad.className = 'go'; pad.textContent = 'TAP!';
+      padTimer = setTimeout(() => finishRace(-2), Math.max(500, s.leaderSince + LEAD_MS - performance.now() - 300));
+    }, Math.max(0, s.race.goAt - now));
+  }
+  function padPress() {
+    if (!duel || duel.state === 'done') return;
+    clearTimeout(padTimer);
+    finishRace(duel.state === 'wait' ? -1 : Math.round(performance.now() - duel.goAt));
+  }
+  $('pad').addEventListener('pointerdown', e => { e.preventDefault(); padPress(); });
+  function finishRace(ms) {
+    const d = duel; d.state = 'done';
+    const s = d.snake, pad = $('pad'); pad.className = 'done'; pad.disabled = true;
+    pad.textContent = ms === -1 ? 'Too early!' : ms === -2 ? 'Too slow!' : `${ms} ms`;
+    const sameTurn = snakes.includes(s) && s.leaderSince === d.turn && s.members.includes(me) && s.members[0] !== me;
+    if (sameTurn) s.race.entries.push({ p: me, ms, at: now });
+    if (sameTurn && ms > 0) stats.best = stats.best ? Math.min(stats.best, ms) : ms;
+    const rank = sameTurn && ms > 0 ? raceRanked(s).findIndex(e => e.p === me) + 1 : 0;
+    $('duelResult').textContent = !sameTurn ? 'The turn ended before you finished. Try again next turn.'
+      : ms < 0 ? 'No time recorded. You can race again next turn.'
+      : rank === 1 ? "You're in first so far! Winner is announced when the turn ends 👑" : `You're #${rank} so far. Best is ${raceRanked(s)[0].ms} ms.`;
+    setTimeout(() => { $('duel').hidden = true; duel = null; }, 1600);
+  }
+
+  // ---------- Peek ----------
+  let peekFor = null, peekTimer = 0;
+  function peekAt(sx, sy) {
+    let best = null, bd = 24;
+    for (const s of snakes) for (const p of s.members) {
+      const q = toScreen(p.x, p.y), d = Math.hypot(q.x - sx, q.y - sy);
+      if (d < bd) { bd = d; best = p; }
+    }
+    const el = $('peek');
+    if (!best || best === me) { el.hidden = true; return; }
+    peekFor = best;
+    $('peekAva').textContent = best.handle ? best.handle[0].toUpperCase() : '?';
+    $('peekAva').style.setProperty('--c', `hsl(${best.hue},85%,62%)`);
+    $('peekHandle').textContent = name(best);
+    $('peekPlat').hidden = !best.handle; $('peekPlat').dataset.plat = best.platform; $('peekPlat').textContent = PLAT[best.platform];
+    $('peekFollow').hidden = !best.handle; $('peekFollow').dataset.plat = best.platform;
+    el.hidden = false;
+    el.style.left = Math.min(W - 276, Math.max(16, sx - 130)) + 'px';
+    el.style.top = Math.min(H - 80, Math.max(16, sy + 22)) + 'px';
+    clearTimeout(peekTimer); peekTimer = setTimeout(() => { el.hidden = true; }, 3500);
+  }
+  function follow(p) { if (p && p.handle) toast(`Opens @${p.handle} on ${PLAT[p.platform]}. You tap Follow there.`); }
+  $('peekFollow').addEventListener('click', () => follow(peekFor));
+  $('spotFollow').addEventListener('click', e => { e.stopPropagation(); const s = mySnake(); if (s) follow(s.members[0]); });
+
+  // ---------- Rendering ----------
+  function inView(x, y, pad) {
+    const hw = W / cam.z / 2 + pad, hh = H / cam.z / 2 + pad;
+    return Math.abs(x - cam.x) < hw && Math.abs(y - cam.y) < hh;
+  }
+  function polyline(m) { ctx.beginPath(); ctx.moveTo(m[0].x, m[0].y); for (let i = 1; i < m.length; i++) ctx.lineTo(m[i].x, m[i].y); }
+
+  function drawArena() {
+    const fl = ctx.createRadialGradient(0, 0, 0, 0, 0, ARENA_R);
+    fl.addColorStop(0, '#173252'); fl.addColorStop(.7, '#112640'); fl.addColorStop(1, '#0c1b30');
+    ctx.beginPath(); ctx.arc(0, 0, ARENA_R, 0, TAU); ctx.fillStyle = fl; ctx.fill();
+    ctx.save(); ctx.clip();
+    // staggered dot lattice
+    const step = 64, vw = W / cam.z / 2 + step, vh = H / cam.z / 2 + step;
+    ctx.fillStyle = 'rgba(125,180,230,.13)';
+    for (let gy = Math.floor((cam.y - vh) / step) * step; gy < cam.y + vh; gy += step) {
+      const off = (Math.round(gy / step) & 1) ? step / 2 : 0;
+      for (let gx = Math.floor((cam.x - vw) / step) * step + off; gx < cam.x + vw; gx += step) { ctx.beginPath(); ctx.arc(gx, gy, 2.2, 0, TAU); ctx.fill(); }
+    }
+    // drifting motes
+    for (const m of motes) {
+      const x = m.x + Math.sin(now / 3000 + m.ph) * 20, y = m.y + Math.cos(now / 3700 + m.ph) * 20;
+      if (!inView(x, y, 20)) continue;
+      ctx.globalAlpha = .25 + .2 * Math.sin(now / 900 + m.ph);
+      ctx.fillStyle = '#bfe3ff'; ctx.beginPath(); ctx.arc(x, y, m.s, 0, TAU); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+    // rim: soft outer glow, thick rail, inner highlight, tick marks
+    for (const [w, a] of [[46, .05], [26, .08], [12, .14]]) { ctx.beginPath(); ctx.arc(0, 0, ARENA_R + 6, 0, TAU); ctx.lineWidth = w; ctx.strokeStyle = `rgba(56,189,248,${a})`; ctx.stroke(); }
+    ctx.beginPath(); ctx.arc(0, 0, ARENA_R + 6, 0, TAU); ctx.lineWidth = 8; ctx.strokeStyle = '#1d4f73'; ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, 0, ARENA_R + 2, 0, TAU); ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(125,211,252,.55)'; ctx.stroke();
+    ctx.strokeStyle = 'rgba(125,211,252,.35)'; ctx.lineWidth = 3;
+    for (let i = 0; i < 120; i++) {
+      const a = i / 120 * TAU, x = Math.cos(a), y = Math.sin(a);
+      if (!inView(x * ARENA_R, y * ARENA_R, 30)) continue;
+      const len = i % 10 === 0 ? 18 : 8;
+      ctx.beginPath(); ctx.moveTo(x * (ARENA_R + 12), y * (ARENA_R + 12)); ctx.lineTo(x * (ARENA_R + 12 + len), y * (ARENA_R + 12 + len)); ctx.stroke();
+    }
+  }
+
+  function drawBolt(b) {
+    if (!inView(b.x, b.y, 60)) return;
+    const bob = Math.sin(now / 420 + b.ph) * 4, rot = now / 1100 + b.ph, x = b.x, y = b.y + bob;
+    ctx.globalAlpha = .55 + .2 * Math.sin(now / 300 + b.ph);
+    ctx.drawImage(glow('56,189,248'), x - 55, y - 55, 110, 110);
+    ctx.globalAlpha = 1;
+    ctx.save(); ctx.translate(x, y);
+    ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(0, 22 - bob, 13, 4, 0, 0, TAU); ctx.fill();
+    ctx.rotate(rot);
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) { const a = i / 6 * TAU; ctx.lineTo(Math.cos(a) * 16, Math.sin(a) * 16); }
+    ctx.closePath();
+    const g = ctx.createLinearGradient(-16, -16, 16, 16); g.addColorStop(0, '#e0f7ff'); g.addColorStop(.5, '#7dd3fc'); g.addColorStop(1, '#0284c7');
+    ctx.fillStyle = g; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = '#f0fbff'; ctx.stroke();
+    ctx.rotate(-rot);
+    ctx.beginPath(); ctx.moveTo(2.5, -10); ctx.lineTo(-6, 1.5); ctx.lineTo(-.5, 1.5); ctx.lineTo(-2.5, 10); ctx.lineTo(6, -1.5); ctx.lineTo(.5, -1.5); ctx.closePath();
+    ctx.fillStyle = '#073b56'; ctx.fill();
+    ctx.restore();
+  }
+
+  function drawCrown(x, y, s, tilt, c = ctx) {
+    c.save(); c.translate(x, y); c.rotate(tilt); c.scale(s, s);
+    c.fillStyle = 'rgba(0,0,0,.3)'; c.beginPath(); c.ellipse(0, 9, 12, 2.5, 0, 0, TAU); c.fill();
+    c.beginPath(); c.moveTo(-12, 6); c.lineTo(-13.5, -6); c.lineTo(-6, 0); c.lineTo(0, -11); c.lineTo(6, 0); c.lineTo(13.5, -6); c.lineTo(12, 6); c.closePath();
+    const g = c.createLinearGradient(0, -11, 0, 7); g.addColorStop(0, '#fff3b0'); g.addColorStop(.5, '#ffc93c'); g.addColorStop(1, '#d98a0b');
+    c.fillStyle = g; c.fill(); c.lineJoin = 'round'; c.lineWidth = 1.6; c.strokeStyle = '#7a4d00'; c.stroke();
+    c.fillStyle = '#e09a12'; c.strokeStyle = '#7a4d00'; c.lineWidth = 1.2;
+    c.beginPath(); c.roundRect(-12.5, 4, 25, 4.5, 1.5); c.fill(); c.stroke();
+    for (const [gx, gy, col] of [[0, -11, '#ff5fa2'], [-13.5, -6, '#7dd3fc'], [13.5, -6, '#7dd3fc']]) { c.beginPath(); c.arc(gx, gy, 2.2, 0, TAU); c.fillStyle = col; c.fill(); }
+    c.fillStyle = 'rgba(255,255,255,.7)'; c.beginPath(); c.ellipse(-5, -1, 1.6, 3, -.4, 0, TAU); c.fill();
+    c.restore();
+  }
+
+  function drawHead(s, h, isMine) {
+    const a = h.angle, boosting = now < s.boostUntil;
+    // pool of spotlight under every head
+    ctx.globalAlpha = .55; ctx.drawImage(glow('255,201,60'), h.x - 80, h.y - 80, 160, 160); ctx.globalAlpha = 1;
+    if (boosting) { ctx.globalAlpha = .8; ctx.drawImage(glow('56,189,248'), h.x - 60, h.y - 60, 120, 120); ctx.globalAlpha = 1; }
+    // shadow
+    ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.ellipse(h.x + 3, h.y + 11, HEAD_R, HEAD_R * .55, 0, 0, TAU); ctx.fill();
+    // heading pointer, so you can still tell which way the head is going
+    const fx = Math.cos(a), fy = Math.sin(a), px = -fy, py = fx, tip = HEAD_R + 15;
+    ctx.beginPath();
+    ctx.moveTo(h.x + fx * tip, h.y + fy * tip);
+    ctx.lineTo(h.x + fx * (HEAD_R + 4) + px * 8, h.y + fy * (HEAD_R + 4) + py * 8);
+    ctx.lineTo(h.x + fx * (HEAD_R + 4) - px * 8, h.y + fy * (HEAD_R + 4) - py * 8);
+    ctx.closePath(); ctx.fillStyle = '#fff'; ctx.fill();
+    // the head IS the profile: avatar disc inside a platform-colored ring
+    ctx.beginPath(); ctx.arc(h.x, h.y, HEAD_R + 3.5, 0, TAU); ctx.fillStyle = platRing(h, h.x, h.y); ctx.fill();
+    ctx.drawImage(avatar(h), h.x - HEAD_R, h.y - HEAD_R, HEAD_R * 2, HEAD_R * 2);
+    // turn timer ring
+    const frac = Math.max(0, 1 - (now - s.leaderSince) / LEAD_MS), live = raceLive(s);
+    ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.arc(h.x, h.y, HEAD_R + 9, 0, TAU); ctx.lineWidth = 3.5; ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.stroke();
+    ctx.beginPath(); ctx.arc(h.x, h.y, HEAD_R + 9, -Math.PI / 2, -Math.PI / 2 + frac * TAU); ctx.lineWidth = 3.5;
+    ctx.strokeStyle = live ? (Math.floor(now / 250) % 2 ? '#ff5f7e' : '#ffc93c') : '#ffc93c'; ctx.stroke();
+    // crown floats above (screen-up), with a little bob
+    drawCrown(h.x, h.y - HEAD_R - 17 + Math.sin(now / 320 + h.pid) * 1.5, 1.1, Math.sin(now / 700 + h.pid) * .08);
+  }
+
+  // Platform ring color (Instagram gets its gradient)
+  function platRing(p, x, y) {
+    if (!p.handle && !(p === me && me.img)) return '#5b6b80';
+    if (p.platform === 'ig') { const g = ctx.createLinearGradient(x - HEAD_R, y + HEAD_R, x + HEAD_R, y - HEAD_R); g.addColorStop(0, '#f58529'); g.addColorStop(.5, '#dd2a7b'); g.addColorStop(1, '#8134af'); return g; }
+    return { tt: '#25f4ee', x: '#e7e9ea', yt: '#ff0033', tw: '#9146ff' }[p.platform];
+  }
+  // Profile picture sprite: an uploaded photo, or a generated avatar with the handle's initial
+  const avatar = p => sprite(`a${p.pid}|${p.img ? 'img' : ''}`, 128, (g, S) => {
+    const c = S / 2;
+    g.save(); g.beginPath(); g.arc(c, c, c, 0, TAU); g.clip();
+    if (p.img) {
+      const iw = p.img.naturalWidth, ih = p.img.naturalHeight, k = Math.max(S / iw, S / ih);
+      g.drawImage(p.img, c - iw * k / 2, c - ih * k / 2, iw * k, ih * k);
+    } else {
+      const hue = p === me ? 330 : p.hue, grd = g.createLinearGradient(0, 0, S, S);
+      grd.addColorStop(0, `hsl(${hue},90%,70%)`); grd.addColorStop(1, `hsl(${(hue + 40) % 360},80%,48%)`);
+      g.fillStyle = p.handle ? grd : '#3a475a'; g.fillRect(0, 0, S, S);
+      g.fillStyle = p.handle ? 'rgba(12,16,30,.82)' : '#9fb0c4';
+      g.font = `400 ${S * .5}px "Bagel Fat One", system-ui`; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText(p.handle ? p.handle[0].toUpperCase() : '?', c, c + S * .04);
+    }
+    // gloss
+    const gl = g.createLinearGradient(0, 0, 0, S * .55); gl.addColorStop(0, 'rgba(255,255,255,.35)'); gl.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = gl; g.beginPath(); g.ellipse(c, S * .22, S * .4, S * .26, 0, 0, TAU); g.fill();
+    g.restore();
+  });
+
+  function drawLabel(h, text, bg, fg, dot) {
+    ctx.font = '800 12.5px Figtree, system-ui';
+    const w = ctx.measureText(text).width + (dot ? 26 : 16), x = h.x - w / 2, y = h.y - HEAD_R - 54;
+    ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.roundRect(x, y + 2, w, 22, 11); ctx.fill();
+    ctx.fillStyle = bg; ctx.beginPath(); ctx.roundRect(x, y, w, 22, 11); ctx.fill();
+    if (dot) { ctx.fillStyle = dot; ctx.beginPath(); ctx.arc(x + 12, y + 11, 4, 0, TAU); ctx.fill(); }
+    ctx.fillStyle = fg; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText(text, x + (dot ? 20 : 8), y + 11.5);
+  }
+  const PLAT_DOT = { ig: '#dd2a7b', tt: '#25f4ee', x: '#e7e9ea', yt: '#ff0033', tw: '#9146ff' };
+
+  function draw(dt) {
+    const mine = mySnake();
+    // Camera always follows the head you're following (your snake's leader)
+    const focus = (mine || biggest()).members[0];
+    const zTarget = Math.min(W, H) / (joined ? 860 : 1150);
+    cam.x += (focus.x - cam.x) * 0.12; cam.y += (focus.y - cam.y) * 0.12; cam.z += (zTarget - cam.z) * 0.05;
+    shake.a *= Math.pow(0.88, dt * 60);
+    const sx = (Math.random() - .5) * shake.a, sy = (Math.random() - .5) * shake.a;
+
+    // background
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    const bg = ctx.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, '#0a1424'); bg.addColorStop(1, '#060b15');
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+    ctx.setTransform(DPR * cam.z, 0, 0, DPR * cam.z, DPR * (W / 2 - cam.x * cam.z + sx), DPR * (H / 2 - cam.y * cam.z + sy));
+
+    drawArena();
+    for (const b of bolts) drawBolt(b);
+
+    // shadows for all snakes first so bodies sit on top
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    ctx.save(); ctx.translate(4, 9);
+    for (const s of snakes) { polyline(s.members); ctx.lineWidth = R * 2; ctx.strokeStyle = 'rgba(0,0,0,.32)'; ctx.stroke(); }
+    ctx.restore();
+
+    for (const s of snakes) {
+      const m = s.members, isMine = s === mine;
+      // body tube in the snake's team color
+      polyline(m); ctx.lineWidth = R * 2 + 7; ctx.strokeStyle = isMine ? 'hsl(330,55%,28%)' : `hsl(${s.hue},45%,22%)`; ctx.stroke();
+      polyline(m); ctx.lineWidth = R * 2 + 2; ctx.strokeStyle = isMine ? 'hsl(330,60%,40%)' : `hsl(${s.hue},45%,34%)`; ctx.stroke();
+      // beads, tail first; last few taper
+      const L = m.length;
+      for (let i = L - 1; i >= 1; i--) {
+        const p = m[i];
+        if (!inView(p.x, p.y, 30)) continue;
+        const taper = i > L - 6 ? .6 + .4 * (L - 1 - i) / 5 : 1, r = R * taper;
+        if (p === me) {
+          const pulse = 1 + Math.sin(now / 200) * .12;
+          ctx.globalAlpha = .7; ctx.drawImage(glow('255,95,162'), p.x - 40, p.y - 40, 80, 80); ctx.globalAlpha = 1;
+          ctx.drawImage(bead(330, 100, 66), p.x - r * 1.25, p.y - r * 1.25, r * 2.5, r * 2.5);
+          ctx.beginPath(); ctx.arc(p.x, p.y, r * 1.25 + 5 * pulse, 0, TAU); ctx.lineWidth = 3; ctx.strokeStyle = '#fff'; ctx.stroke();
+        } else {
+          ctx.drawImage(bead(hueOf(p)), p.x - r, p.y - r, r * 2, r * 2);
+        }
+      }
+    }
+    // heads above every body
+    for (const s of snakes) { const h = s.members[0]; if (inView(h.x, h.y, 120)) drawHead(s, h, s === mine); }
+
+    // particles
+    for (const p of parts) {
+      ctx.globalAlpha = Math.min(1, p.life / p.max * 1.4);
+      ctx.fillStyle = p.color;
+      if (p.sq) { ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2); ctx.restore(); }
+      else { ctx.beginPath(); ctx.arc(p.x, p.y, p.size / 2, 0, TAU); ctx.fill(); }
+    }
+    ctx.globalAlpha = 1;
+
+    // labels on top of everything
+    for (const s of snakes) {
+      const h = s.members[0];
+      if (!inView(h.x, h.y, 160)) continue;
+      if (h === me) drawLabel(h, me.handle ? `@${me.handle} · YOU` : 'YOU · in the spotlight', '#ffc93c', '#2a1a00');
+      else drawLabel(h, h.handle ? '@' + h.handle : 'anonymous', 'rgba(14,22,38,.92)', '#f1f6fa', h.handle ? PLAT_DOT[h.platform] : null);
+    }
+    if (mine && mine.members[0] !== me) {
+      ctx.font = '900 11.5px Figtree, system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      const w = 40, y = me.y + R + 22;
+      ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.roundRect(me.x - w / 2, y - 9, w, 20, 10); ctx.fill();
+      ctx.fillStyle = '#ff5fa2'; ctx.beginPath(); ctx.roundRect(me.x - w / 2, y - 11, w, 20, 10); ctx.fill();
+      ctx.fillStyle = '#2a0614'; ctx.fillText('YOU', me.x, y);
+    }
+
+    // screen space: vignette + edge arrow to your head
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    const vg = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * .35, W / 2, H / 2, Math.max(W, H) * .75);
+    vg.addColorStop(0, 'rgba(4,8,16,0)'); vg.addColorStop(1, 'rgba(4,8,16,.6)');
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+    // Edge arrow pointing back to YOU when you're off-screen down the snake
+    if (mine && mine.members[0] !== me) {
+      const hs = toScreen(me.x, me.y), pad = 46;
+      if (hs.x < pad || hs.y < pad || hs.x > W - pad || hs.y > H - pad) {
+        const ang = Math.atan2(hs.y - H / 2, hs.x - W / 2);
+        const t = Math.min((W / 2 - pad) / Math.abs(Math.cos(ang) || 1e-6), (H / 2 - pad) / Math.abs(Math.sin(ang) || 1e-6));
+        const ax = W / 2 + Math.cos(ang) * t, ay = H / 2 + Math.sin(ang) * t;
+        ctx.globalAlpha = .7; ctx.drawImage(glow('255,95,162'), ax - 34, ay - 34, 68, 68); ctx.globalAlpha = 1;
+        ctx.save(); ctx.translate(ax, ay); ctx.rotate(ang);
+        ctx.fillStyle = '#ff5fa2'; ctx.strokeStyle = '#7a1a45'; ctx.lineWidth = 2; ctx.lineJoin = 'round';
+        ctx.beginPath(); ctx.moveTo(16, 0); ctx.lineTo(-9, -12); ctx.lineTo(-4, 0); ctx.lineTo(-9, 12); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.restore();
+        const lx = ax - Math.cos(ang) * 34, ly = ay - Math.sin(ang) * 34;
+        ctx.font = '900 11.5px Figtree, system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#ff5fa2'; ctx.beginPath(); ctx.roundRect(lx - 20, ly - 10, 40, 20, 10); ctx.fill();
+        ctx.fillStyle = '#2a0614'; ctx.fillText('YOU', lx, ly + .5);
+      }
+    }
+    drawMini(mine);
+  }
+  function drawCrownScreen(x, y) { drawCrown(x, y, .8, 0); }
+
+  function drawMini(mine) {
+    const S = mini.width, k = (S / 2 - 12) / ARENA_R, c = S / 2;
+    mctx.clearRect(0, 0, S, S);
+    const g = mctx.createRadialGradient(c, c, 0, c, c, c); g.addColorStop(0, 'rgba(23,50,82,.95)'); g.addColorStop(1, 'rgba(10,22,40,.95)');
+    mctx.beginPath(); mctx.arc(c, c, c - 3, 0, TAU); mctx.fillStyle = g; mctx.fill();
+    mctx.lineWidth = 3; mctx.strokeStyle = 'rgba(125,211,252,.4)'; mctx.stroke();
+    mctx.fillStyle = '#7dd3fc';
+    for (const b of bolts) { mctx.beginPath(); mctx.arc(c + b.x * k, c + b.y * k, 3.5, 0, TAU); mctx.fill(); }
+    for (const s of snakes) {
+      mctx.beginPath();
+      s.members.forEach((p, i) => (i ? mctx.lineTo : mctx.moveTo).call(mctx, c + p.x * k, c + p.y * k));
+      mctx.lineWidth = s === mine ? 6 : 4.5; mctx.lineCap = mctx.lineJoin = 'round';
+      mctx.strokeStyle = s === mine ? '#ff5fa2' : `hsla(${s.hue},60%,62%,.85)`; mctx.stroke();
+      const h = s.members[0]; mctx.beginPath(); mctx.arc(c + h.x * k, c + h.y * k, 5, 0, TAU); mctx.fillStyle = '#ffc93c'; mctx.fill();
+    }
+    if (mine) { mctx.beginPath(); mctx.arc(c + me.x * k, c + me.y * k, 6, 0, TAU); mctx.fillStyle = '#fff'; mctx.fill(); }
+  }
+
+  // ---------- HUD ----------
+  const fmt = ms => { const s = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+  let hudAt = 0;
+  function hud() {
+    if (now - hudAt < 120) return; hudAt = now;
+    const total = snakes.reduce((n, s) => n + s.members.length, 0);
+    $('n').textContent = total.toLocaleString(); $('introN').textContent = total.toLocaleString();
+    $('countTail').textContent = snakes.length > 1 ? `playing · ${snakes.length} snakes` : 'playing';
+    const mine = mySnake();
+    if (mine) {
+      const st = $('status'); st.hidden = false;
+      const idx = mine.members.indexOf(me), left = LEAD_MS - (now - mine.leaderSince), head = mine.members[0];
+      const ranked = raceRanked(mine), myEntry = mine.race.entries.find(e => e.p === me), live = raceLive(mine);
+      if (idx === 0) {
+        st.className = 'glass lead';
+        st.textContent = mine.members.length > 1 ? (live ? `👑 Your followers are racing for your spot · ${fmt(left)}` : `👑 You're the head · ${fmt(left)} · grab ⚡ to go faster`) : `👑 You're a snake of one. Steal some people!`;
+      } else {
+        st.className = 'glass';
+        st.textContent = ranked[0] && ranked[0].p === me ? `🔥 You're winning the race. You lead in ${fmt(left)}` : `You're #${idx + 1} of ${mine.members.length} · race ${live ? 'is LIVE' : 'starts in ' + fmt(left - RACE_MS)}`;
+      }
+
+      // Spotlight hero card
+      const spot = $('spot');
+      if (head.pid !== lastHeadPid) { lastHeadPid = head.pid; spot.classList.remove('flash'); void spot.offsetWidth; spot.classList.add('flash'); }
+      spot.classList.toggle('me', idx === 0);
+      $('spotTag').textContent = idx === 0 ? "You're in the spotlight" : 'Now leading';
+      $('spotTime').textContent = fmt(left);
+      $('spotProg').style.strokeDashoffset = (182.2 * (1 - Math.max(0, left) / LEAD_MS)).toFixed(1);
+      const photo = head === me && me.img;
+      $('spotAva').textContent = photo ? '' : head.handle ? head.handle[0].toUpperCase() : '?';
+      $('spotAva').style.setProperty('--c', head === me ? '#ff5fa2' : `hsl(${head.hue},85%,62%)`);
+      $('spotAva').style.backgroundImage = photo ? `url("${me.imgUrl}")` : '';
+      $('spotAva').style.backgroundSize = photo ? 'cover' : '';
+      $('spotHandle').textContent = head === me ? (me.handle ? '@' + me.handle : 'You') : name(head);
+      $('spotPlat').hidden = !head.handle; $('spotPlat').dataset.plat = head.platform; $('spotPlat').textContent = PLAT[head.platform];
+      $('spotSub').textContent = idx === 0 ? (me.handle ? `${mine.members.length - 1} people see you` : 'Add a handle to get followers') : `${mine.members.length - 1} watching`;
+      const f = $('spotFollow'); f.hidden = idx === 0 || !head.handle; f.dataset.plat = head.platform;
+      $('spotOpens').hidden = !(idx === 0 && me.handle);
+      $('spotOpensN').textContent = spotStats ? spotStats.opens : 0;
+
+      // Race bar
+      const rb = $('race'); rb.classList.toggle('live', live);
+      $('raceCloses').textContent = live ? `🔴 Race LIVE · ${fmt(left)}` : `⚔️ Race starts in ${fmt(left - RACE_MS)}`;
+      // Podium: always three equal slots in one row, names truncate instead of stretching the card
+      const list = $('raceList'); list.textContent = '';
+      if (ranked.length) for (let i = 0; i < 3; i++) {
+        const e = ranked[i], li = document.createElement('li');
+        li.className = !e ? 'slot' : e.p === me ? 'mine' : i === 0 ? 'first' : '';
+        const top = document.createElement('span'); top.className = 'pos'; top.textContent = i === 0 ? '👑 1st' : i === 1 ? '2nd' : '3rd';
+        const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = e ? name(e.p) : '—';
+        const ms = document.createElement('span'); ms.className = 'ms'; ms.textContent = e ? `${e.ms} ms` : '';
+        li.append(top, nm, ms); list.append(li);
+      }
+      else { const li = document.createElement('li'); li.className = 'empty'; li.textContent = live ? (idx === 0 ? 'Your followers are racing…' : myEntry ? 'Waiting for times…' : 'Tap here to race!') : 'Everyone races in the last 10 seconds. Fastest tap leads next.'; list.append(li); }
+    }
+    const list = snakes.slice().sort((a, b) => b.members.length - a.members.length).slice(0, 5), max = list[0].members.length;
+    $('boardList').innerHTML = list.map(s => { const c = s === mine ? '#ff5fa2' : `hsl(${s.hue},60%,62%)`; return `<li class="${s === mine ? 'mine' : ''}" style="--c:${c}"><span class="orb"></span><span>${s === mine ? 'Your snake' : 'Snake ' + s.id}</span><span class="n">${s.members.length}</span><span class="bar"><i style="width:${Math.round(s.members.length / max * 100)}%"></i></span></li>`; }).join('');
+  }
+
+  function toast(msg, gold) {
+    const el = document.createElement('div');
+    el.className = 'toast glass' + (gold ? ' gold' : ''); el.textContent = msg;
+    $('toasts').prepend(el);
+    setTimeout(() => el.remove(), 3200);
+    while ($('toasts').children.length > 3) $('toasts').lastChild.remove();
+  }
+
+  // ---------- Buttons ----------
+  $('joinForm').addEventListener('submit', e => {
+    e.preventDefault();
+    const s = biggest(), t = s.members[s.members.length - 1];
+    me = segment(t.x + 2, t.y + 2);
+    me.handle = $('handle').value.trim().replace(/^@+/, '').replace(/\s+/g, '').slice(0, 30) || null;
+    me.platform = $('platform').value;
+    const file = $('photo').files && $('photo').files[0];
+    if (file) {
+      me.imgUrl = URL.createObjectURL(file);
+      const img = new Image(); img.onload = () => { me.img = img; }; img.src = me.imgUrl;
+    }
+    s.members.push(me); joined = true;
+    $('intro').hidden = true; $('bottom').hidden = false; $('mock').hidden = false;
+    burst(me.x, me.y, 24, ['#ff5fa2', '#fff'], { speed: 220, life: 700, size: 4 });
+    toast(`You joined at the tail. You're #${s.members.length}. Race to be the next head!`);
+  });
+  $('race').addEventListener('click', e => {
+    if (e.target.closest('#share')) return;
+    const s = mySnake(); if (!s || duel || s.members[0] === me || !raceLive(s) || s.race.entries.some(x => x.p === me)) return;
+    openRace(s);
+  });
+  // ---------- Share card ----------
+  function makeCaption(s) {
+    const pos = s.members.indexOf(me) + 1, n = s.members.length, tag = me.handle ? ` Follow me @${me.handle}` : '';
+    if (stats.led) return `I led a snake of ${Math.max(n, stats.biggestLed)} strangers for 30 seconds 👑${stats.opens ? ` and ${stats.opens} people checked my profile` : ''}.${tag} 🐍 Join the snake → plsfollow.me`;
+    return `I'm #${pos} in a snake of ${n} strangers 🐍 Waiting for my turn to lead 👑${tag} → plsfollow.me`;
+  }
+  // Editorial share card: soft gradient mesh, paper grain, serif headline, a polaroid of the actual snake
+  const SHARE_THEMES = {
+    cream:    { bg: '#f3ece0', blobs: ['#f7c6b0', '#d9c8ef', '#f4dfa6'], ink: '#2a2320', muted: '#8a7d70', accent: '#c4543c', line: 'rgba(42,35,32,.16)', frame: '#fffdf8', photo: '#efe6d8', dots: 'rgba(42,35,32,.09)', body: ['#e9967a', '#b49ad8'], tape: 'rgba(255,236,190,.7)', grain: 34 },
+    blush:    { bg: '#fbe4e9', blobs: ['#ffbfd0', '#ffe0b0', '#e2d2ff'], ink: '#3b1d2a', muted: '#a07686', accent: '#d63a72', line: 'rgba(59,29,42,.15)', frame: '#ffffff', photo: '#fff1f4', dots: 'rgba(59,29,42,.08)', body: ['#ff8fb1', '#ffc46b'], tape: 'rgba(255,255,255,.65)', grain: 30 },
+    midnight: { bg: '#14111c', blobs: ['#4a2f6e', '#6e2f52', '#2f4a6e'], ink: '#f6efe4', muted: '#9a90a8', accent: '#ffb0c8', line: 'rgba(246,239,228,.16)', frame: '#221e2c', photo: '#191622', dots: 'rgba(246,239,228,.08)', body: ['#ffb0c8', '#a99bff'], tape: 'rgba(255,255,255,.14)', grain: 22 },
+  };
+  let shareTheme = 'cream', grainTile = null;
+  const SERIF = '"Instrument Serif", Georgia, serif', HAND = 'Caveat, "Bradley Hand", cursive';
+  const hexRgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+  const mixHex = (a, b, t) => { const A = hexRgb(a), B = hexRgb(b); return `rgb(${A.map((v, i) => Math.round(v + (B[i] - v) * t)).join(',')})`; };
+  function sparkle(c, x, y, s, col) {
+    c.fillStyle = col; c.beginPath(); c.moveTo(x, y - s);
+    c.quadraticCurveTo(x, y, x + s, y); c.quadraticCurveTo(x, y, x, y + s); c.quadraticCurveTo(x, y, x - s, y); c.quadraticCurveTo(x, y, x, y - s); c.fill();
+  }
+  function fitFont(c, text, weight, family, max, width) {
+    let size = max; do { c.font = `${weight} ${size}px ${family}`; size -= 2; } while (c.measureText(text).width > width && size > 20);
+  }
+  function makeShareCard(s) {
+    const Wc = 1080, Hc = 1350, cvs = document.createElement('canvas'); cvs.width = Wc; cvs.height = Hc;
+    const c = cvs.getContext('2d'), T = SHARE_THEMES[shareTheme], m = s.members;
+    const pos = m.indexOf(me) + 1, n = m.length, led = stats.led > 0, total = led ? Math.max(n, stats.biggestLed) : n;
+    // background: flat tone + three soft color blobs + paper grain
+    c.fillStyle = T.bg; c.fillRect(0, 0, Wc, Hc);
+    [[120, 160, 620, T.blobs[0]], [980, 520, 680, T.blobs[1]], [300, 1240, 640, T.blobs[2]]].forEach(([x, y, r, col]) => {
+      const g = c.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, col + 'e6'); g.addColorStop(1, col + '00');
+      c.fillStyle = g; c.fillRect(0, 0, Wc, Hc);
+    });
+    // top meta line
+    const d = new Date();
+    c.textBaseline = 'alphabetic'; c.letterSpacing = '6px';
+    c.font = '800 22px Figtree, system-ui'; c.fillStyle = T.ink; c.textAlign = 'left'; c.fillText('PLSFOLLOW.ME', 72, 100);
+    c.fillStyle = T.muted; c.textAlign = 'right';
+    c.fillText(`${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase()} · ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`, Wc - 72, 100);
+    c.letterSpacing = '0px';
+    c.fillStyle = T.line; c.fillRect(72, 124, Wc - 144, 2);
+    // headline: roman line + big italic accent line
+    c.textAlign = 'left'; c.fillStyle = T.ink;
+    const line1 = led ? 'I led a snake of' : `I'm no. ${pos} in a snake of`;
+    fitFont(c, line1, 400, SERIF, 86, Wc - 144); c.fillText(line1, 70, 222);
+    const line2 = `${total} strangers`;
+    fitFont(c, line2, 'italic 400', SERIF, 168, Wc - 200); c.fillStyle = T.accent; c.fillText(line2, 64, 372);
+    const l2w = c.measureText(line2).width;
+    sparkle(c, 64 + l2w + 46, 250, 26, T.accent); sparkle(c, 64 + l2w + 86, 300, 13, T.accent);
+    // polaroid of the actual snake, slightly tilted
+    c.save(); c.translate(Wc / 2, 742); c.rotate(-.035);
+    c.shadowColor = 'rgba(30,20,10,.22)'; c.shadowBlur = 50; c.shadowOffsetY = 24;
+    c.fillStyle = T.frame; c.beginPath(); c.roundRect(-400, -320, 800, 640, 10); c.fill();
+    c.shadowColor = 'transparent';
+    const P = { x: -370, y: -290, w: 740, h: 500 };
+    c.save(); c.beginPath(); c.roundRect(P.x, P.y, P.w, P.h, 4); c.clip();
+    c.fillStyle = T.photo; c.fillRect(P.x, P.y, P.w, P.h);
+    c.fillStyle = T.dots;
+    for (let y = P.y + 20; y < P.y + P.h; y += 34) for (let x = P.x + 20; x < P.x + P.w; x += 34) { c.beginPath(); c.arc(x, y, 2.2, 0, TAU); c.fill(); }
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const p of m) { x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y); }
+    const pad = 86, k = Math.min((P.w - pad * 2) / Math.max(1, x1 - x0), (P.h - pad * 2) / Math.max(1, y1 - y0), 2.2);
+    const tx = p => P.x + P.w / 2 + (p.x - (x0 + x1) / 2) * k, ty = p => P.y + P.h / 2 + 12 + (p.y - (y0 + y1) / 2) * k;
+    const r = Math.max(8, Math.min(20, R * k));
+    // soft shadow pass, then pastel beads fading head → tail
+    c.fillStyle = 'rgba(40,25,15,.13)';
+    for (const p of m) { c.beginPath(); c.arc(tx(p) + 3, ty(p) + 7, r, 0, TAU); c.fill(); }
+    for (let i = m.length - 1; i >= 1; i--) {
+      const p = m[i], x = tx(p), y = ty(p), mine = p === me;
+      c.fillStyle = mine ? T.accent : mixHex(T.body[0], T.body[1], i / Math.max(1, m.length - 1));
+      c.beginPath(); c.arc(x, y, mine ? r * 1.3 : r, 0, TAU); c.fill();
+      c.fillStyle = 'rgba(255,255,255,.38)'; c.beginPath(); c.arc(x - r * .32, y - r * .36, r * .36, 0, TAU); c.fill();
+      if (mine) { c.beginPath(); c.arc(x, y, r * 1.3 + 9, 0, TAU); c.lineWidth = 4; c.strokeStyle = T.accent; c.stroke(); }
+    }
+    const h = m[0], hr = r * 1.9, hx = tx(h), hy = ty(h);
+    c.beginPath(); c.arc(hx, hy, hr + 7, 0, TAU); c.fillStyle = T.frame; c.fill();
+    c.beginPath(); c.arc(hx, hy, hr + 7, 0, TAU); c.lineWidth = 3; c.strokeStyle = T.accent; c.stroke();
+    c.drawImage(avatar(h), hx - hr, hy - hr, hr * 2, hr * 2);
+    drawCrown(hx, hy - hr - 22, 1.9, -.08, c);
+    // handwritten "me" note with a little arrow
+    const mx = tx(me), my = ty(me), mr = (h === me ? hr + 7 : r * 1.3 + 9), left = mx > P.x + P.w * .6;
+    const lx = Math.max(P.x + 70, Math.min(P.x + P.w - 70, mx + (left ? -1 : 1) * (mr + 90))), ly = Math.max(P.y + 50, my - mr - 50);
+    c.font = `700 48px ${HAND}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = T.accent;
+    c.fillText(h === me ? "that's me!" : 'me!', lx, ly);
+    c.beginPath(); c.moveTo(lx + (left ? 30 : -30), ly + 24);
+    const ex = mx + (left ? mr * .7 : -mr * .7), ey = my - mr * .7;
+    c.quadraticCurveTo(lx + (left ? 50 : -50), ey, ex, ey); c.lineWidth = 3.5; c.lineCap = 'round'; c.strokeStyle = T.accent; c.stroke();
+    const ang = Math.atan2(ey - (ey), ex - (lx + (left ? 50 : -50)));
+    for (const s2 of [-1, 1]) { c.beginPath(); c.moveTo(ex, ey); c.lineTo(ex - Math.cos(ang + s2 * .5) * 16, ey - Math.sin(ang + s2 * .5) * 16); c.stroke(); }
+    c.restore();
+    // handwritten polaroid caption
+    c.font = `600 50px ${HAND}`; c.textAlign = 'left'; c.textBaseline = 'alphabetic'; c.fillStyle = T.ink;
+    c.fillText(led ? 'my 30 seconds of fame' : `${n} strangers & me`, -362, 284);
+    sparkle(c, 352, 266, 14, T.accent);
+    // washi tape
+    c.rotate(.06); c.fillStyle = T.tape; c.fillRect(-90, -346, 180, 52);
+    c.restore();
+    // stats: three editorial columns with hairline dividers
+    const tiles = [
+      [led ? `${stats.led}×` : `no. ${pos}`, led ? 'times I led' : 'my spot'],
+      [stats.best ? `${stats.best}ms` : `${n}`, stats.best ? 'fastest tap' : 'in my snake'],
+      [me.handle ? `${stats.opens + (spotStats ? spotStats.opens : 0)}` : `${snakes.length}`, me.handle ? 'profile opens' : 'snakes alive'],
+    ];
+    const cw = (Wc - 144) / 3;
+    tiles.forEach(([v, l], i) => {
+      const cx = 72 + cw * i + cw / 2;
+      if (i) { c.fillStyle = T.line; c.fillRect(72 + cw * i, 1128, 2, 104); }
+      c.textAlign = 'center'; c.fillStyle = i === 0 ? T.accent : T.ink;
+      fitFont(c, v, 400, SERIF, 84, cw - 40); c.fillText(v, cx, 1190);
+      c.letterSpacing = '4px'; c.font = '800 19px Figtree, system-ui'; c.fillStyle = T.muted; c.fillText(l.toUpperCase(), cx, 1228); c.letterSpacing = '0px';
+    });
+    // footer
+    c.fillStyle = T.line; c.fillRect(72, 1258, Wc - 144, 2);
+    c.textBaseline = 'middle'; c.textAlign = 'left';
+    if (me.handle) {
+      c.drawImage(avatar(me), 72, 1278, 48, 48);
+      c.font = '800 30px Figtree, system-ui'; c.fillStyle = T.ink; const t = `@${me.handle}`; c.fillText(t, 134, 1303);
+      const tw = c.measureText(t).width;
+      c.fillStyle = PLAT_DOT[me.platform]; c.beginPath(); c.arc(152 + tw, 1303, 7, 0, TAU); c.fill();
+      c.font = '600 24px Figtree, system-ui'; c.fillStyle = T.muted; c.fillText(PLAT[me.platform], 168 + tw, 1304);
+    } else {
+      c.font = `italic 400 40px ${SERIF}`; c.fillStyle = T.ink; c.fillText('pls follow me', 72, 1302);
+    }
+    c.font = `italic 400 38px ${SERIF}`; c.textAlign = 'right'; c.fillStyle = T.accent;
+    c.fillText('join the snake → plsfollow.me', Wc - 72, 1302);
+    // paper grain over everything
+    if (!grainTile) {
+      grainTile = document.createElement('canvas'); grainTile.width = grainTile.height = 200;
+      const gc = grainTile.getContext('2d'), id = gc.createImageData(200, 200);
+      for (let i = 0; i < id.data.length; i += 4) { const v = Math.random() * 255 | 0; id.data[i] = id.data[i + 1] = id.data[i + 2] = v; id.data[i + 3] = 255; }
+      gc.putImageData(id, 0, 0);
+    }
+    c.globalAlpha = T.grain / 255; c.globalCompositeOperation = 'overlay';
+    c.fillStyle = c.createPattern(grainTile, 'repeat'); c.fillRect(0, 0, Wc, Hc);
+    c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
+    return cvs;
+  }
+  let shareCanvas = null;
+  async function renderShare() {
+    const s = mySnake(); if (!s) return;
+    try { await Promise.all([`86px ${SERIF}`, `italic 86px ${SERIF}`, `700 48px ${HAND}`].map(f => document.fonts.load(f))); } catch {}
+    shareCanvas = makeShareCard(s);
+    $('shareImg').src = shareCanvas.toDataURL('image/png');
+    document.querySelectorAll('#shareThemes button').forEach(b => b.setAttribute('aria-pressed', b.dataset.theme === shareTheme));
+  }
+  $('share').addEventListener('click', async () => {
+    const s = mySnake(); if (!s) return;
+    $('caption').value = makeCaption(s);
+    $('shareModal').hidden = false;
+    await renderShare();
+  });
+  $('shareThemes').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    shareTheme = b.dataset.theme; renderShare();
+  });
+  $('shareClose').addEventListener('click', () => { $('shareModal').hidden = true; });
+  $('shareModal').addEventListener('click', e => { if (e.target.id === 'shareModal') $('shareModal').hidden = true; });
+  $('copyCap').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText($('caption').value); toast('Caption copied'); }
+    catch { $('caption').select(); toast('Select the caption and copy it'); }
+  });
+  $('saveImg').addEventListener('click', () => {
+    // The real app downloads the PNG directly; this preview blocks downloads
+    toast('Right-click or long-press the image to save it. The live site downloads it directly.');
+  });
+  $('nativeShare').addEventListener('click', () => {
+    shareCanvas.toBlob(async blob => {
+      const file = new File([blob], 'plsfollow-me.png', { type: 'image/png' });
+      try {
+        if (!navigator.canShare || !navigator.canShare({ files: [file] })) throw new Error('no share');
+        await navigator.share({ files: [file], text: $('caption').value });
+      } catch { toast('On phones this opens the share sheet (Instagram, TikTok, X…). Not available in this preview.'); }
+    });
+  });
+  $('skip').addEventListener('click', () => {
+    const s = mySnake(); if (!s || s.members[0] === me) return;
+    s.race.entries = [{ p: me, ms: 1, at: 0 }]; endTurn(s);
+  });
+  $('endTurn').addEventListener('click', () => {
+    const s = mySnake(); if (!s || duel) return;
+    s.leaderSince = now - (LEAD_MS - RACE_MS);
+    s.race = { entries: [], started: false, goAt: now + rand(2000, 3500) };
+  });
+  $('bite').addEventListener('click', () => {
+    const s = mySnake() || biggest(); if (s.members.length < SELF_SKIP + 4) { toast('Snake is too short to bite itself'); return; }
+    const h = s.members[0];
+    if (h === me) { toast('You are the head. Steer into your own body!'); return; }
+    h.force = s.members[Math.floor(s.members.length * 0.55)]; h.forceUntil = now + 4000; s.grace = now;
+  });
+  $('crowd').addEventListener('click', () => {
+    const s = biggest();
+    for (let i = 0; i < 50; i++) { const t = s.members[s.members.length - 1]; s.members.push(segment(t.x + Math.random() * 4, t.y + Math.random() * 4)); }
+    toast('50 strangers joined the tail');
+  });
+
+  let last = performance.now();
+  function frame(t) {
+    const dt = Math.min(0.05, (t - last) / 1000); last = t; now = t;
+    update(dt); draw(dt); hud();
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
