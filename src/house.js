@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 // House hosts: the site's own accounts, played by the server. They roam, chase boosts, dodge trolls,
 // steal from other snakes and sometimes pick fights with each other. Players can join their snakes.
-// They're tagged as hosts in the game, don't count as players, and stay off the hall of fame.
+// They count as online players and appear in the hall of fame like everyone else.
 
 // Each group shares one snake. Edit this list to change the hosts.
 // A profile photo for a host goes in public/hosts/<handle>.jpg (square JPEG, ~256px).

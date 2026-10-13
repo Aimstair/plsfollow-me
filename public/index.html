@@ -215,19 +215,37 @@ select option { color: #0b1220; background: #fff; }
 #duelResult { font-weight: 800; font-size: 14px; min-height: 1.4em; font-variant-numeric: tabular-nums; }
 
 /* Share card */
-#shareModal { position: fixed; inset: 0; z-index: 7; display: grid; place-items: center; padding: 16px; background: rgba(4, 8, 16, .78); }
-#shareModal .box { width: min(440px, 100%); max-height: calc(100% - 8px); overflow-y: auto; padding: 16px; display: grid; gap: 12px; border-radius: 22px; }
-.sm-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-.sm-head h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 24px; }
-#shareImg { width: 100%; aspect-ratio: 4 / 5; border-radius: 14px; box-shadow: 0 16px 40px rgba(0,0,0,.5); background: #f3ece0; user-select: auto; -webkit-user-select: auto; -webkit-touch-callout: default; }
-#caption { font: inherit; font-size: 15px; line-height: 1.45; color: var(--ink); background: rgba(7, 13, 24, .8); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; resize: none; user-select: text; -webkit-user-select: text; }
-.sm-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.cta.sm { font-size: 17px; padding: 10px 18px; border-radius: 13px; box-shadow: 0 4px 0 #b8336f, 0 10px 20px rgba(255, 95, 162, .35); }
+#shareModal { position: fixed; inset: 0; z-index: 12; display: grid; place-items: center; padding: 16px; background: rgba(4, 8, 16, .8); backdrop-filter: blur(6px); }
+#shareModal .box { position: relative; width: min(860px, 100%); max-height: calc(100% - 8px); overflow-y: auto; padding: 18px; display: grid; gap: 18px; border-radius: 24px; grid-template-columns: minmax(0, 340px) minmax(0, 1fr); align-items: start; }
 .themes { display: flex; gap: 8px; }
-.theme { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; font: 800 14px var(--body, Figtree), system-ui; color: var(--ink); background: rgba(255,255,255,.05); border: 1px solid var(--line); border-radius: 999px; padding: 8px 10px; cursor: pointer; }
+.theme { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; font: 800 13px var(--body, Figtree), system-ui; color: var(--ink); background: rgba(255,255,255,.05); border: 1px solid var(--line); border-radius: 999px; padding: 8px 10px; cursor: pointer; }
 .theme i { width: 16px; height: 16px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(255,255,255,.25); }
 .theme[aria-pressed="true"] { border-color: var(--you); background: rgba(255,95,162,.14); }
-.sm-note { margin: 0; font-size: 12px; color: var(--muted); }
+.sm-close { position: absolute; top: 12px; right: 12px; z-index: 1; }
+.sm-preview { display: grid; gap: 10px; }
+#shareImg { width: 100%; aspect-ratio: 4 / 5; border-radius: 16px; box-shadow: 0 18px 44px rgba(0,0,0,.55); background: #f3ece0; user-select: auto; -webkit-user-select: auto; -webkit-touch-callout: default; }
+.sm-side { display: grid; gap: 10px; align-content: start; min-width: 0; padding-top: 4px; }
+.sm-head { padding-right: 44px; }
+.sm-head h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 28px; line-height: 1.05; }
+.sm-head p { margin: 6px 0 0; color: var(--muted); font-size: 13.5px; }
+.sm-label { font-size: 11.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-top: 4px; }
+#caption { font: inherit; font-size: 14.5px; line-height: 1.45; color: var(--ink); background: rgba(7, 13, 24, .8); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; resize: none; user-select: text; -webkit-user-select: text; }
+.sm-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.sm-btn { display: grid; justify-items: center; gap: 6px; padding: 12px 6px 10px; border-radius: 16px; border: 1px solid var(--line); background: rgba(255,255,255,.05); color: var(--ink); font: 800 12px var(--body); cursor: pointer; transition: transform .12s, background .15s, border-color .15s; min-width: 0; }
+.sm-btn:hover, .sm-btn:focus-visible { background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.28); transform: translateY(-1px); }
+.sm-btn svg { width: 30px; height: 30px; display: block; }
+.sm-btn span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.sm-btn.ok { border-color: var(--go); background: rgba(52,211,153,.14); }
+@media (max-width: 760px) {
+  #shareModal { padding: 10px; align-items: start; }
+  #shareModal .box { grid-template-columns: 1fr; gap: 12px; padding: 14px; }
+  .sm-preview { justify-items: center; }
+  #shareImg { width: auto; max-width: 100%; height: min(46vh, 420px); }
+  .themes { width: 100%; }
+  .sm-head h2 { font-size: 24px; }
+  .sm-btn { padding: 10px 4px 8px; font-size: 11px; }
+  .sm-btn svg { width: 26px; height: 26px; }
+}
 
 @media (max-width: 640px) {
   #board, #brand { display: none; }
@@ -241,6 +259,20 @@ select option { color: #0b1220; background: #fff; }
   .who .h { font-size: 19px; }
   .follow { padding: 11px 14px; font-size: 14px; }
   .racebar li { padding: 5px 7px; }
+}
+/* Phones held sideways (short screens): shrink the HUD so the game stays visible */
+@media (orientation: landscape) and (max-height: 520px) {
+  #brand, #board { display: none; }
+  #top { zoom: .78; top: calc(6px + env(safe-area-inset-top, 0px)); }
+  #toasts { zoom: .85; top: calc(52px + env(safe-area-inset-top, 0px)); }
+  #bottom { zoom: .6; width: min(480px, 70vw); bottom: calc(8px + env(safe-area-inset-bottom, 0px)); }
+  #raceList { display: none; }
+  #mini { width: 84px; height: 84px; top: calc(8px + env(safe-area-inset-top, 0px)); bottom: auto; right: calc(8px + env(safe-area-inset-right, 0px)); }
+  #audioCtl, #audioCtl.ingame { zoom: .8; top: calc(8px + env(safe-area-inset-top, 0px)); left: calc(8px + env(safe-area-inset-left, 0px)); flex-direction: row; }
+  #donate, #donate.ingame { width: 38px; padding: 0; justify-content: center; font-size: 17px; left: calc(8px + env(safe-area-inset-left, 0px)); bottom: calc(8px + env(safe-area-inset-bottom, 0px)); }
+  #donate .dl { display: none; }
+  #duel .box { zoom: .8; left: calc(10px + env(safe-area-inset-left, 0px)); top: 50%; bottom: auto; transform: translateY(-50%); width: 300px; }
+  #intro h1 { font-size: 44px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .toast, .live-dot, .beads i, .spot, .spot-inner::before, #intro h1 span, #pad, .ava .crownico, .tag::before { animation: none !important; }
@@ -383,7 +415,7 @@ select option { color: #0b1220; background: #fff; }
   <div class="wrap">
     <span class="beads" aria-hidden="true"><i style="--c:#ff5fa2;--d:0"></i><i style="--c:#ffc93c;--d:1"></i><i style="--c:#34d399;--d:2"></i><i style="--c:#7dd3fc;--d:3"></i><i style="--c:#a78bfa;--d:4"></i><i style="--c:#fb923c;--d:5"></i><i style="--c:#f472b6;--d:6"></i></span>
     <h1>pls follow <span>me</span></h1>
-    <p>One giant snake made of strangers. Each head leads for 30 seconds. In the last 10, everyone races to be next, and while you lead, the whole snake sees your profile.</p>
+    <p>One giant snake made of strangers. Each head leads for 30 seconds while everyone behind taps to be next, and while you lead, the whole snake sees your profile.</p>
     <div class="live"><span class="live-dot"></span><span><b id="introN">0</b> strangers are in the snake right now</span></div>
     <form id="joinForm" class="glass">
       <p id="invite" hidden></p>
@@ -421,22 +453,37 @@ select option { color: #0b1220; background: #fff; }
 
 <div id="shareModal" hidden>
   <div class="box glass" role="dialog" aria-modal="true" aria-labelledby="shareTitle">
-    <div class="sm-head"><h2 id="shareTitle">Share your spot</h2><button class="iconbtn" id="shareClose" aria-label="Close">✕</button></div>
-    <img id="shareImg" alt="Your plsfollow.me share card">
-    <div id="shareThemes" class="themes" role="group" aria-label="Card style">
-      <button class="theme" data-theme="cream" aria-pressed="true"><i style="background:linear-gradient(135deg,#f7c6b0,#d9c8ef)"></i>Cream</button>
-      <button class="theme" data-theme="blush" aria-pressed="false"><i style="background:linear-gradient(135deg,#ffbfd0,#ffe0b0)"></i>Blush</button>
-      <button class="theme" data-theme="midnight" aria-pressed="false"><i style="background:linear-gradient(135deg,#4a2f6e,#14111c)"></i>Midnight</button>
+    <button class="iconbtn sm-close" id="shareClose" aria-label="Close">✕</button>
+    <div class="sm-preview">
+      <img id="shareImg" alt="Your plsfollow.me share card">
+      <div id="shareThemes" class="themes" role="group" aria-label="Card style">
+        <button class="theme" data-theme="cream" aria-pressed="true"><i style="background:linear-gradient(135deg,#f7c6b0,#d9c8ef)"></i>Cream</button>
+        <button class="theme" data-theme="blush" aria-pressed="false"><i style="background:linear-gradient(135deg,#ffbfd0,#ffe0b0)"></i>Blush</button>
+        <button class="theme" data-theme="midnight" aria-pressed="false"><i style="background:linear-gradient(135deg,#4a2f6e,#14111c)"></i>Midnight</button>
+      </div>
     </div>
-    <label class="label" for="caption">Caption</label>
-    <textarea id="caption" rows="3"></textarea>
-    <div class="sm-actions">
-      <button class="cta sm" id="nativeShare">Share…</button>
-      <button class="iconbtn" id="saveImg">⬇ Save image</button>
-      <button class="iconbtn" id="copyCap">Copy caption</button>
-      <button class="iconbtn" id="copyInvite" hidden>🔗 Invite link</button>
+    <div class="sm-side">
+      <div class="sm-head">
+        <h2 id="shareTitle">Share your spot</h2>
+        <p>Post your card. Friends who open your link join your snake.</p>
+      </div>
+      <label class="sm-label" for="caption">Caption</label>
+      <textarea id="caption" rows="4"></textarea>
+      <div class="sm-label">Post to</div>
+      <div class="sm-grid">
+        <button class="sm-btn" data-to="x" data-icon="x">X</button>
+        <button class="sm-btn" data-to="th" data-icon="th">Threads</button>
+        <button class="sm-btn" data-to="fb" data-icon="fb">Facebook</button>
+        <button class="sm-btn" data-to="wa" data-icon="wa">WhatsApp</button>
+      </div>
+      <div class="sm-label">Instagram &amp; TikTok: save the card, then paste the caption</div>
+      <div class="sm-grid">
+        <button class="sm-btn" id="saveImg" data-icon="save">Save card</button>
+        <button class="sm-btn" id="copyCap" data-icon="copy">Copy caption</button>
+        <button class="sm-btn" id="copyInvite" data-icon="link">Copy link</button>
+        <button class="sm-btn" id="nativeShare" data-icon="more">More…</button>
+      </div>
     </div>
-    <p class="sm-note">Made for Instagram Stories, TikTok and X (1080 × 1350).</p>
   </div>
 </div>
 

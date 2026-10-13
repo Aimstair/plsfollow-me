@@ -84,7 +84,7 @@ class Game {
     s.leaderSince = this.now; s.boostUntil = 0; s.turn = (s.turn + 1) & 255;
     s.path = null; // new head: the trail starts again from the body as it is now
     // Leading real people counts toward the hall of fame
-    if (h.handle && !h.bot && s.members.length > 1) this.fame.led(h.handle, h.platform, s.members.length);
+    if (h.handle && s.members.length > 1) this.fame.led(h.handle, h.platform, s.members.length);
     // The tap race runs for the whole turn: everyone behind the head can tap, including people who
     // arrive mid-turn (they start from zero). Counts reset with every new leader.
     s.race = { entries: new Map(), dirty: true };
@@ -574,7 +574,7 @@ class Game {
     if (!c.player || !p || !p.handle || p === c.player || c.opened.has(p.pid)) return;
     c.opened.add(p.pid); // one count per viewer per profile
     if (p.client) this.send(p.client, { t: 'opened', n: 1 });
-    if (!p.bot) this.fame.open(p.handle, p.platform, c.ip);
+    this.fame.open(p.handle, p.platform, c.ip);
   }
 
   // Someone tapped a profile on the hall of fame list

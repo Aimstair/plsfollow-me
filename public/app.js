@@ -705,7 +705,8 @@
   function draw(dt) {
     const focusSnake = mine || (view.snakes.length ? biggest() : null);
     const focus = focusSnake ? focusSnake.members[0] : { x: 0, y: 0 };
-    const zTarget = Math.min(W, H) / (me ? 860 : 1150);
+    // Phones (either orientation) zoom in a bit more so faces read; desktop is unchanged
+    const zTarget = Math.max(Math.min(W, H), Math.max(W, H) * 0.6) / (me ? 860 : 1150);
     // Frame-rate independent easing, so 60 Hz and 120 Hz screens feel the same
     const kf = 1 - Math.pow(0.85, dt * 60), kz = 1 - Math.pow(0.95, dt * 60);
     cam.x += (focus.x - cam.x) * kf; cam.y += (focus.y - cam.y) * kf; cam.z += (zTarget - cam.z) * kz;
@@ -1229,7 +1230,6 @@
     // Freeze the snake as it is right now
     shareSnake = { members: mine.members.map(p => ({ ...p })) };
     $('caption').value = makeCaption(mine);
-    $('copyInvite').hidden = !handleOf(myPid);
     $('shareModal').hidden = false;
     await renderShare();
   });
@@ -1239,33 +1239,68 @@
   });
   $('shareClose').addEventListener('click', () => { $('shareModal').hidden = true; });
   $('shareModal').addEventListener('click', e => { if (e.target.id === 'shareModal') $('shareModal').hidden = true; });
-  $('copyCap').addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText($('caption').value); toast('Caption copied'); }
-    catch { $('caption').select(); toast('Select the caption and copy it'); }
+  // Share window buttons: icon on top, label below; each confirms on itself (notices would sit behind the window)
+  const UTIL_ICON = {
+    save: '<path d="M12 4v10m0 0-4-4m4 4 4-4M5 18h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
+    copy: '<rect x="8" y="8" width="11" height="12" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M5 15V6.5A2.5 2.5 0 0 1 7.5 4H15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+    link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+    more: '<path d="M12 15V4m0 0L8 8m4-4 4 4M6 12v6a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
+  };
+  const SHARE_TILE = {
+    fb: ['#1877f2', '<path d="M13.4 20v-6.6h2.2l.4-2.6h-2.6V9.2c0-.8.2-1.3 1.3-1.3H16V5.6c-.2 0-1-.1-1.9-.1-1.9 0-3.3 1.2-3.3 3.4v1.9H8.6v2.6h2.2V20z" fill="#fff"/>'],
+    wa: ['#25d366', '<path d="M12 4.6a7.3 7.3 0 0 0-6.3 11l-1 3.8 3.9-1a7.3 7.3 0 1 0 3.4-13.8z" fill="none" stroke="#fff" stroke-width="1.7"/><path d="M9.4 8.7c.2-.4.4-.4.6-.4h.5c.2 0 .4 0 .5.4l.6 1.4c.1.2 0 .4-.1.5l-.4.5c-.1.1-.1.3 0 .4.6 1 1.4 1.7 2.4 2.2.2.1.3.1.4 0l.6-.7c.1-.2.3-.2.5-.1l1.4.7c.2.1.3.2.3.4 0 .6-.3 1.3-.9 1.5-.6.3-1.7.3-3.3-.5-1.8-1-3-2.7-3.3-3.4-.4-.8-.3-1.9.2-2.4z" fill="#fff"/>'],
+  };
+  const tileSvg = ([bg, glyph]) => `<svg viewBox="0 0 24 24" aria-hidden="true"><rect width="24" height="24" rx="6.5" fill="${bg}"/>${glyph}</svg>`;
+  document.querySelectorAll('.sm-btn').forEach(b => {
+    const k = b.dataset.icon, label = b.textContent.trim();
+    const svg = GLYPH[k] ? iconSvg(k, 30) : SHARE_TILE[k] ? tileSvg(SHARE_TILE[k]) : `<svg viewBox="0 0 24 24" aria-hidden="true">${UTIL_ICON[k] || ''}</svg>`;
+    b.innerHTML = svg + '<span></span>'; b.lastChild.textContent = label; b.dataset.label = label;
   });
-  $('copyInvite').addEventListener('click', async () => {
-    const url = 'https://' + inviteLink();
-    try { await navigator.clipboard.writeText(url); toast('Invite link copied: friends who open it join your snake'); }
-    catch { toast(url); }
-  });
-  $('saveImg').addEventListener('click', () => {
+  function confirmBtn(b, text) {
+    const span = b.lastChild; span.textContent = text; b.classList.add('ok'); sfx('click');
+    clearTimeout(b._t); b._t = setTimeout(() => { span.textContent = b.dataset.label; b.classList.remove('ok'); }, 1600);
+  }
+  const shareUrl = () => 'https://' + inviteLink();
+  async function copyText(text, b) {
+    try { await navigator.clipboard.writeText(text); confirmBtn(b, 'Copied ✓'); }
+    catch { $('caption').focus(); $('caption').select(); confirmBtn(b, 'Press ⌘/Ctrl+C'); }
+  }
+  // Posting: each network's own share page, prefilled with the caption and your invite link
+  const INTENT = {
+    x: c => `https://x.com/intent/post?text=${encodeURIComponent(c)}`,
+    th: c => `https://www.threads.net/intent/post?text=${encodeURIComponent(c)}`,
+    fb: (c, u) => `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(u)}`,
+    wa: c => `https://wa.me/?text=${encodeURIComponent(c)}`,
+  };
+  document.querySelectorAll('.sm-btn[data-to]').forEach(b => b.addEventListener('click', () => {
+    const cap = $('caption').value.trim();
+    window.open(INTENT[b.dataset.to](cap, shareUrl()), '_blank', 'noopener');
+    confirmBtn(b, 'Opened ✓');
+  }));
+  $('copyCap').addEventListener('click', e => copyText($('caption').value, e.currentTarget));
+  $('copyInvite').addEventListener('click', e => copyText(shareUrl(), e.currentTarget));
+  $('saveImg').addEventListener('click', e => {
     if (!shareCanvas) return;
+    const b = e.currentTarget;
     shareCanvas.toBlob(blob => {
       const a = document.createElement('a'), url = URL.createObjectURL(blob);
       a.href = url; a.download = 'plsfollow-me.png'; document.body.append(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 2000);
+      confirmBtn(b, 'Saved ✓');
     });
   });
-  $('nativeShare').addEventListener('click', () => {
+  $('nativeShare').addEventListener('click', e => {
     if (!shareCanvas) return;
+    const b = e.currentTarget;
     shareCanvas.toBlob(async blob => {
-      const file = new File([blob], 'plsfollow-me.png', { type: 'image/png' });
+      const file = new File([blob], 'plsfollow-me.png', { type: 'image/png' }), text = $('caption').value;
       try {
-        if (!navigator.canShare || !navigator.canShare({ files: [file] })) throw new Error('no share');
-        await navigator.share({ files: [file], text: $('caption').value });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) await navigator.share({ files: [file], text });
+        else if (navigator.share) await navigator.share({ text, url: shareUrl() });
+        else { await copyText(text, b); return; }
       } catch (err) {
         if (err && err.name === 'AbortError') return;
-        toast('Sharing isn’t supported here. Save the image and copy the caption instead.');
+        copyText(text, b);
       }
     });
   });
