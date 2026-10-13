@@ -56,6 +56,12 @@ Then at your domain registrar, point DNS at the app (the `fly certs add` output 
 
 A shared-cpu-1x machine with 512 MB costs a few dollars a month.
 
+### Automatic deploys
+
+`.github/workflows/fly-deploy.yml` deploys on every push to `main` (and can be run by hand from the
+Actions tab). It needs a repo secret named `FLY_API_TOKEN` containing a deploy token from
+`fly tokens create deploy -a plsfollow-me`.
+
 ## Limits to know about
 
 - Every client receives the whole world 20 times a second (about 8 bytes per player per frame).
