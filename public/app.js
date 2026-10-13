@@ -964,6 +964,31 @@
       return c.toDataURL('image/jpeg', .82).split(',')[1];
     } catch { return null; } finally { URL.revokeObjectURL(url); }
   }
+  // Remember the join form in this browser (handle, platform and the small photo), so coming back is one tap
+  const SAVE_KEY = 'pf-profile';
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}') || {}; } catch { saved = {}; }
+  const persist = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(saved)); } catch { /* storage full or blocked */ } };
+  let photoB64 = typeof saved.img === 'string' ? saved.img : null;
+  function showPhoto() {
+    $('photoPrev').hidden = !photoB64; $('clearPhoto').hidden = !photoB64;
+    if (photoB64) $('photoPrev').src = 'data:image/jpeg;base64,' + photoB64;
+  }
+  if (typeof saved.handle === 'string') $('handle').value = saved.handle ? '@' + saved.handle : '';
+  if (saved.platform && PLAT[saved.platform]) $('platform').value = saved.platform;
+  showPhoto();
+  $('photo').addEventListener('change', async () => {
+    const file = $('photo').files && $('photo').files[0];
+    if (!file) return;
+    const b64 = await shrinkPhoto(file);
+    if (b64) { photoB64 = b64; saved.img = b64; persist(); showPhoto(); }
+    else { $('joinErr').textContent = "That photo couldn't be read. Try a JPG or PNG."; $('joinErr').hidden = false; }
+  });
+  $('clearPhoto').addEventListener('click', () => {
+    photoB64 = null; delete saved.img; persist(); $('photo').value = ''; showPhoto();
+  });
+  $('platform').addEventListener('change', () => { saved.platform = $('platform').value; persist(); });
+
   $('joinForm').addEventListener('submit', async e => {
     e.preventDefault();
     if (window.PFAudio) PFAudio.unlock();
@@ -972,8 +997,8 @@
     if (handle && !/^[A-Za-z0-9._-]+$/.test(handle)) {
       $('joinErr').textContent = 'Handles can only use letters, numbers, . _ and -'; $('joinErr').hidden = false; $('joinBtn').disabled = false; return;
     }
-    const file = $('photo').files && $('photo').files[0];
-    joinInfo = { handle, platform: $('platform').value, img: file ? await shrinkPhoto(file) : null, follow: $('friend').value.trim() };
+    saved.handle = handle; saved.platform = $('platform').value; persist();
+    joinInfo = { handle, platform: $('platform').value, img: photoB64, follow: $('friend').value.trim() };
     send({ t: 'join', ...joinInfo });
   });
   // A troll caught a head with no tail: back to the main screen, form still filled in for a quick rejoin

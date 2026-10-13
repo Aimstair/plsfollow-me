@@ -1,9 +1,12 @@
 'use strict';
+const fs = require('fs');
+const path = require('path');
 // House hosts: the site's own accounts, played by the server. They roam, chase boosts, dodge trolls,
 // steal from other snakes and sometimes pick fights with each other. Players can join their snakes.
 // They're tagged as hosts in the game, don't count as players, and stay off the hall of fame.
 
 // Each group shares one snake. Edit this list to change the hosts.
+// A profile photo for a host goes in public/hosts/<handle>.jpg (square JPEG, ~256px).
 const GROUPS = [
   [{ handle: 'ericmar.g', platform: 'th' }],
   [{ handle: 'maisoncarte_official', platform: 'tt' }, { handle: 'clipit_app', platform: 'tt' }],
@@ -20,6 +23,9 @@ class House {
     this.slots = [];
     GROUPS.forEach((members, group) => members.forEach(m => this.slots.push({ ...m, group, player: null, deadUntil: 0 })));
     this.reserved = new Set(this.slots.map(s => s.handle.toLowerCase()));
+    for (const slot of this.slots) {
+      try { slot.img = fs.readFileSync(path.join(__dirname, '..', 'public', 'hosts', `${slot.handle}.jpg`)); } catch { slot.img = null; }
+    }
   }
 
   isReserved(handle) { return !!handle && this.reserved.has(handle.toLowerCase()); }
@@ -45,7 +51,7 @@ class House {
 
   spawn(slot) {
     const g = this.g;
-    const p = { pid: g.pidSeq++, bot: true, group: slot.group, handle: slot.handle, platform: slot.platform, img: null, client: null,
+    const p = { pid: g.pidSeq++, bot: true, group: slot.group, handle: slot.handle, platform: slot.platform, img: slot.img, client: null,
       x: 0, y: 0, angle: 0, target: 0, wob: 0, lastInput: g.now, lastSteer: 0, mind: { until: 0, mode: 'wander', aim: null } };
     g.players.set(p.pid, p);
     slot.player = p;

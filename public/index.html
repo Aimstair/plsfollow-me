@@ -266,6 +266,10 @@ select option { color: #0b1220; background: #fff; }
 #fameList li:first-child:not(.empty) { background: linear-gradient(90deg, rgba(255,201,60,.16), rgba(255,201,60,0)); }
 /* Wide screens: the board sits beside the join form instead of under it */
 @media (min-width: 1180px) { #fame { position: fixed; right: 28px; top: 50%; transform: translateY(-50%); width: 320px; max-height: calc(100vh - 140px); overflow-y: auto; } }
+#photoRow { display: flex; align-items: center; gap: 10px; min-width: 0; }
+#photoRow #photo { flex: 1; min-width: 0; }
+#photoPrev { width: 46px; height: 46px; border-radius: 50%; object-fit: cover; flex: none; box-shadow: 0 0 0 2px var(--you); }
+#clearPhoto { flex: none; }
 #joinErr { margin: 0; color: #ff8fa3; font-weight: 700; font-size: 14px; }
 #status.lead.urgent { background: linear-gradient(180deg, #ff8a9e, #f43f5e); color: #2a0610; animation: urgent .6s ease-in-out infinite alternate; }
 @keyframes urgent { to { transform: scale(1.04); box-shadow: 0 8px 30px rgba(244,63,94,.55); } }
@@ -368,7 +372,11 @@ select option { color: #0b1220; background: #fff; }
         </select>
       </div>
       <label for="photo">Profile photo (optional, it's your face in the snake)</label>
-      <input id="photo" name="photo" type="file" accept="image/*">
+      <div id="photoRow">
+        <img id="photoPrev" alt="" hidden>
+        <input id="photo" name="photo" type="file" accept="image/*">
+        <button type="button" class="iconbtn" id="clearPhoto" hidden>Remove</button>
+      </div>
       <label for="friend">Join a friend's snake (optional)</label>
       <input id="friend" name="friend" placeholder="@their handle, if they're playing" autocomplete="off" maxlength="31" list="liveHandles">
       <datalist id="liveHandles"></datalist>
