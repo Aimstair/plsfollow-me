@@ -65,6 +65,8 @@ const server = http.createServer((req, res) => {
     res.end(img);
     return;
   }
+  // Invite links like /@kirk.plays load the game with that friend prefilled
+  if (/^\/@[A-Za-z0-9._-]{1,30}$/.test(pathname)) { serveStatic(req, res, '/'); return; }
   serveStatic(req, res, pathname);
 });
 
@@ -82,7 +84,7 @@ server.on('upgrade', (req, socket, head) => {
   }
   wss.handleUpgrade(req, socket, head, ws => {
     perIp.set(ip, (perIp.get(ip) || 0) + 1);
-    const c = game.connect(ws);
+    const c = game.connect(ws, ip);
     ws.on('message', (data, isBinary) => { if (!isBinary) game.onMessage(c, data.toString()); });
     ws.on('close', () => {
       game.disconnect(c);

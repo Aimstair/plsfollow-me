@@ -30,6 +30,7 @@ It prints messages received, race taps accepted/rejected, and the server's tick 
 | Path | What it is |
 |---|---|
 | `server.js` | HTTP static files, `/healthz`, avatar images at `/a/<boot>/<pid>`, WebSocket at `/ws` |
+| `src/fame.js` | Today's spotlight hall of fame (most-opened profiles), saved to `DATA_DIR` |
 | `src/game.js` | Authoritative 20 Hz simulation: snakes, turns, races, steals, bites, trolls, binary state encoding |
 | `public/index.html` | Markup and styles |
 | `public/app.js` | Client: interpolation, rendering, input, race pad, spotlight card, share card |
@@ -54,7 +55,7 @@ Then at your domain registrar, point DNS at the app (the `fly certs add` output 
 - `AAAA` record `@` → the app's IPv6
 - `CNAME` `www` → `plsfollow-me.fly.dev`
 
-A shared-cpu-1x machine with 512 MB costs a few dollars a month.
+A shared-cpu-1x machine with 512 MB costs a few dollars a month. The hall of fame is saved on a 1 GB Fly volume named `pf_data`, mounted at `/data`.
 
 ### Automatic deploys
 

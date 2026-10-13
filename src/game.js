@@ -1,6 +1,7 @@
 'use strict';
 // Authoritative simulation for plsfollow.me. One room, one loop, everyone gets the same state buffer.
 const crypto = require('crypto');
+const { Fame } = require('./fame');
 
 const CFG = {
   TICK_MS: 50,
@@ -41,6 +42,9 @@ class Game {
     this.humans = 0;
     this.arenaR = this.radiusFor(0);
     this.perf = { sum: 0, n: 0, max: 0, avg: 0, peak: 0 };
+    this.fame = new Fame(process.env.DATA_DIR);
+    this.fameSent = -1;
+    this.fameTimer = setInterval(() => this.flushFame(), 5000);
     this.timer = setInterval(() => this.tick(), CFG.TICK_MS);
     this.pinger = setInterval(() => this.ping(), 2000);
   }
@@ -68,6 +72,8 @@ class Game {
     if (n) h.angle = Math.atan2(h.y - n.y, h.x - n.x);
     h.target = h.angle;
     s.leaderSince = this.now; s.boostUntil = 0; s.turn = (s.turn + 1) & 255;
+    // Leading real people counts toward the hall of fame
+    if (h.handle && s.members.length > 1) this.fame.led(h.handle, h.platform, s.members.length);
     s.race = { entries: new Map(), goAt: this.now + CFG.LEAD_MS - CFG.RACE_MS + rand(1500, 5500), warned: false, dirty: false };
   }
 
@@ -326,12 +332,13 @@ class Game {
   }
 
   // ---------- Networking ----------
-  connect(ws) {
-    const c = { ws, player: null, rtt: 300, pingAt: 0, alive: true, opened: new Set(), bucket: 40, bucketAt: Date.now() };
+  connect(ws, ip) {
+    const c = { ws, ip: ip || '?', player: null, rtt: 300, pingAt: 0, alive: true, opened: new Set(), bucket: 40, bucketAt: Date.now() };
     this.clients.add(c);
     this.send(c, { t: 'hello', boot: this.boot, now: Date.now(), cfg: { LEAD_MS: CFG.LEAD_MS, RACE_MS: CFG.RACE_MS, TICK_MS: CFG.TICK_MS } });
     const l = []; for (const p of this.players.values()) l.push(this.profileRow(p));
     if (l.length) this.send(c, { t: 'prof', l });
+    this.send(c, { t: 'fame', day: this.fame.day, top: this.fame.top() });
     ws.on('pong', () => { c.alive = true; if (c.pingAt) c.rtt = Date.now() - c.pingAt; });
     return c;
   }
@@ -388,6 +395,7 @@ class Game {
       }
       case 'tap': return this.tap(c, m);
       case 'open': return this.open(c, m);
+      case 'fameOpen': return this.fameOpen(c, m);
       case 'chat': return this.chat(c, m);
       case 'sync': return this.send(c, { t: 'sync', c: Number(m.c) || 0, s: Date.now() });
       default: return; // 'hb' and unknown messages only count as activity
@@ -404,11 +412,19 @@ class Game {
       const buf = Buffer.from(m.img, 'base64');
       if (buf.length > 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) img = buf; // JPEG only
     }
+    // Optional: join the snake a friend is in, by their handle
+    let friendSnake = null;
+    if (typeof m.follow === 'string' && m.follow.trim()) {
+      const want = m.follow.trim().replace(/^@+/, '').toLowerCase();
+      const friend = HANDLE_RE.test(want) && [...this.players.values()].find(q => q.handle && q.handle.toLowerCase() === want);
+      friendSnake = friend && this.snakeOf(friend);
+      if (!friendSnake) return this.send(c, { t: 'err', code: 'nofriend', msg: `@${want.slice(0, 30)} isn't in the arena right now. Clear the box to join the biggest snake.` });
+    }
     const p = { pid: this.pidSeq++, handle: handle || null, platform, img, client: c, x: 0, y: 0, angle: 0, target: 0, wob: 0, lastInput: this.now, lastSteer: 0 };
     this.players.set(p.pid, p); this.humans++;
     c.player = p;
     // New people join the tail of the biggest snake. Nobody here yet: you start your own and lead it.
-    const s = this.biggest();
+    const s = friendSnake || this.biggest();
     if (s) { const t = s.members[s.members.length - 1]; p.x = t.x + rand(-2, 2); p.y = t.y + rand(-2, 2); s.members.push(p); }
     else { const at = this.safeSpot(); this.spawnLine([p], at.x, at.y, Math.atan2(-at.y, -at.x)); }
     p.lastSteer = this.now; // a fresh head keeps going straight until the first steering message
@@ -432,6 +448,25 @@ class Game {
     if (!c.player || !p || !p.handle || p === c.player || c.opened.has(p.pid)) return;
     c.opened.add(p.pid); // one count per viewer per profile
     if (p.client) this.send(p.client, { t: 'opened', n: 1 });
+    this.fame.open(p.handle, p.platform, c.ip);
+  }
+
+  // Someone tapped a profile on the hall of fame list
+  fameOpen(c, m) {
+    const handle = typeof m.handle === 'string' ? m.handle : '', platform = m.platform;
+    if (!HANDLE_RE.test(handle) || !PLATFORMS.has(platform) || !this.fame.has(handle, platform)) return;
+    if (c.player && c.player.handle && c.player.handle.toLowerCase() === handle.toLowerCase()) return;
+    this.fame.open(handle, platform, c.ip);
+  }
+
+  // Send the board when it changes (at most every 5s) and save it to disk
+  flushFame() {
+    this.fame.rollover();
+    if (this.fame.version !== this.fameSent) {
+      this.fameSent = this.fame.version;
+      this.broadcastJson({ t: 'fame', day: this.fame.day, top: this.fame.top() });
+    }
+    this.fame.save();
   }
 
   profileRow(p) { return [p.pid, p.handle, p.platform, p.img ? 1 : 0]; }
@@ -491,7 +526,7 @@ class Game {
     return { ok: true, humans: this.humans, trolls: this.trolls.length, snakes: this.snakes.length, clients: this.clients.size, tickAvgMs: +this.perf.avg.toFixed(2), tickPeakMs: +this.perf.peak.toFixed(2) };
   }
 
-  stop() { clearInterval(this.timer); clearInterval(this.pinger); }
+  stop() { clearInterval(this.timer); clearInterval(this.pinger); clearInterval(this.fameTimer); this.fame.dirty = true; this.fame.save(); }
 }
 
 module.exports = { Game, CFG };

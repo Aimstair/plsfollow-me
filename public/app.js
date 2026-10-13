@@ -183,8 +183,9 @@
   function onJson(m) {
     switch (m.t) {
       case 'hello': BOOT = m.boot; LEAD_MS = m.cfg.LEAD_MS; RACE_MS = m.cfg.RACE_MS; profiles.clear(); cache.clear(); break;
-      case 'prof': m.l.forEach(setProfile); break;
-      case 'bye': profiles.delete(m.pid); bubbles.delete(m.pid); break;
+      case 'prof': m.l.forEach(setProfile); liveDirty = true; break;
+      case 'bye': profiles.delete(m.pid); bubbles.delete(m.pid); liveDirty = true; break;
+      case 'fame': renderFame(m.top); break;
       case 'chat': onChat(m); break;
       case 'you': myPid = m.pid; onJoined(); break;
       case 'out': knockedOut(m.why); break;
@@ -801,6 +802,7 @@
     if (now - hudAt < 120) return; hudAt = now;
     const online = ws && ws.readyState === 1;
     $('chatBtn').hidden = !myPid;
+    refreshLive();
     $('audioCtl').classList.toggle('ingame', $('intro').hidden);
     $('donate').classList.toggle('ingame', $('intro').hidden);
     document.documentElement.style.setProperty('--bottom-h', ($('bottom').hidden ? 0 : $('bottom').offsetHeight) + 'px');
@@ -872,6 +874,67 @@
     while ($('toasts').children.length > 3) $('toasts').lastChild.remove();
   }
 
+  // ---------- Hall of fame ----------
+  function renderFame(top) {
+    const list = $('fameList'); list.textContent = '';
+    if (!top.length) {
+      const li = document.createElement('li'); li.className = 'empty';
+      li.textContent = 'Nobody yet today. Lead a snake with your handle to get on the board 👑';
+      list.append(li); return;
+    }
+    top.forEach(([handle, platform, opens, led, biggest], i) => {
+      const li = document.createElement('li'); li.tabIndex = 0; li.setAttribute('role', 'link');
+      li.title = `Open @${handle} on ${PLAT[platform]}`;
+      let hsh = 0; for (const ch of handle) hsh = (hsh * 31 + ch.charCodeAt(0)) % 360;
+      const rk = document.createElement('span'); rk.className = 'rk'; rk.textContent = ['🥇', '🥈', '🥉'][i] || i + 1;
+      const av = document.createElement('span'); av.className = 'av'; av.textContent = handle[0].toUpperCase();
+      av.style.setProperty('--c', `linear-gradient(135deg, hsl(${hsh},90%,70%), hsl(${(hsh + 40) % 360},80%,50%))`);
+      av.style.setProperty('--ring', PLAT_DOT[platform]);
+      const who = document.createElement('span'); who.className = 'who';
+      const nm = document.createElement('div'); nm.className = 'nm'; nm.textContent = '@' + handle;
+      const meta = document.createElement('div'); meta.className = 'meta';
+      meta.textContent = `${PLAT[platform]}${led ? ` · led ${led}×` : ''}${biggest > 1 ? ` · snake of ${biggest}` : ''}`;
+      who.append(nm, meta);
+      const op = document.createElement('span'); op.className = 'op'; op.textContent = `👀 ${opens}`; op.title = 'profile opens today';
+      li.append(rk, av, who, op);
+      const go = () => {
+        send({ t: 'fameOpen', handle, platform });
+        window.open(PROFILE_URL[platform](encodeURIComponent(handle)), '_blank', 'noopener');
+      };
+      li.addEventListener('click', go);
+      li.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+      list.append(li);
+    });
+  }
+
+  // ---------- Join a friend ----------
+  // Invite links look like plsfollow.me/@handle (or ?join=handle)
+  const inviteFrom = (() => {
+    const m = location.pathname.match(/^\/@([A-Za-z0-9._-]{1,30})$/), q = new URLSearchParams(location.search).get('join');
+    const h = m ? m[1] : q && /^@?[A-Za-z0-9._-]{1,30}$/.test(q) ? q.replace(/^@/, '') : '';
+    return h;
+  })();
+  if (inviteFrom) {
+    $('friend').value = '@' + inviteFrom;
+    $('invite').textContent = `🐍 @${inviteFrom} invited you to their snake!`;
+    $('invite').hidden = false;
+  }
+  const syncJoinBtn = () => { const f = $('friend').value.trim().replace(/^@+/, ''); $('joinBtn').textContent = f ? `Join @${f}'s snake` : 'Join the tail'; };
+  $('friend').addEventListener('input', syncJoinBtn); syncJoinBtn();
+  // Suggest handles of people playing right now
+  let liveDirty = true, liveAt = 0;
+  function refreshLive() {
+    if (!liveDirty || now - liveAt < 1000) return; liveDirty = false; liveAt = now;
+    const dl = $('liveHandles'); dl.textContent = '';
+    let n = 0;
+    for (const p of profiles.values()) {
+      if (!p.handle || p.pid === myPid) continue;
+      const o = document.createElement('option'); o.value = '@' + p.handle; dl.append(o);
+      if (++n >= 200) break;
+    }
+  }
+  const inviteLink = () => handleOf(myPid) ? `plsfollow.me/@${handleOf(myPid)}` : 'plsfollow.me';
+
   // ---------- Join ----------
   async function shrinkPhoto(file) {
     const url = URL.createObjectURL(file);
@@ -892,7 +955,7 @@
       $('joinErr').textContent = 'Handles can only use letters, numbers, . _ and -'; $('joinErr').hidden = false; $('joinBtn').disabled = false; return;
     }
     const file = $('photo').files && $('photo').files[0];
-    joinInfo = { handle, platform: $('platform').value, img: file ? await shrinkPhoto(file) : null };
+    joinInfo = { handle, platform: $('platform').value, img: file ? await shrinkPhoto(file) : null, follow: $('friend').value.trim() };
     send({ t: 'join', ...joinInfo });
   });
   // A troll caught a head with no tail: back to the main screen, form still filled in for a quick rejoin
@@ -909,6 +972,7 @@
   function onJoined() {
     $('intro').hidden = true; $('bottom').hidden = false; $('joinBtn').disabled = false;
     greetPending = true; // greeted on the first frame that shows us in a snake
+    if (joinInfo) joinInfo.follow = ''; // a reconnect just rejoins the biggest snake
     sfx('join');
   }
   function greet() {
@@ -925,8 +989,8 @@
   // ---------- Share card ----------
   function makeCaption(s) {
     const pos = myIdx + 1, n = s.members.length, h = handleOf(myPid), tag = h ? ` Follow me @${h}` : '';
-    if (stats.led) return `I led a snake of ${Math.max(n, stats.biggestLed)} strangers for 30 seconds 👑${stats.opens ? ` and ${stats.opens} people checked my profile` : ''}.${tag} 🐍 Join the snake → plsfollow.me`;
-    return `I'm #${pos} in a snake of ${n} strangers 🐍 Waiting for my turn to lead 👑${tag} → plsfollow.me`;
+    if (stats.led) return `I led a snake of ${Math.max(n, stats.biggestLed)} strangers for 30 seconds 👑${stats.opens ? ` and ${stats.opens} people checked my profile` : ''}.${tag} 🐍 Join my snake → ${inviteLink()}`;
+    return `I'm #${pos} in a snake of ${n} strangers 🐍 Waiting for my turn to lead 👑${tag} → ${inviteLink()}`;
   }
   // Editorial share card: soft gradient mesh, paper grain, serif headline, a polaroid of the actual snake
   const SHARE_THEMES = {
@@ -1039,15 +1103,16 @@
     c.textBaseline = 'middle'; c.textAlign = 'left';
     if (myHandle) {
       c.drawImage(avatar(myPid), 72, 1278, 48, 48);
-      c.font = '800 30px Figtree, system-ui'; c.fillStyle = T.ink; const t = `@${myHandle}`; c.fillText(t, 134, 1303);
+      const t = `@${myHandle}`; fitFont(c, t, 800, 'Figtree, system-ui', 30, 280); c.fillStyle = T.ink; c.fillText(t, 134, 1303);
       const tw = c.measureText(t).width;
       c.fillStyle = PLAT_DOT[platOf(myPid)]; c.beginPath(); c.arc(152 + tw, 1303, 7, 0, TAU); c.fill();
       c.font = '600 24px Figtree, system-ui'; c.fillStyle = T.muted; c.fillText(PLAT[platOf(myPid)], 168 + tw, 1304);
     } else {
       c.font = `italic 400 40px ${SERIF}`; c.fillStyle = T.ink; c.fillText('pls follow me', 72, 1302);
     }
-    c.font = `italic 400 38px ${SERIF}`; c.textAlign = 'right'; c.fillStyle = T.accent;
-    c.fillText('join the snake → plsfollow.me', Wc - 72, 1302);
+    c.textAlign = 'right'; c.fillStyle = T.accent;
+    const cta = myHandle ? `join me → ${inviteLink()}` : 'join the snake → plsfollow.me';
+    fitFont(c, cta, 'italic 400', SERIF, 38, myHandle ? 430 : 600); c.fillText(cta, Wc - 72, 1302);
     // paper grain over everything
     if (!grainTile) {
       grainTile = document.createElement('canvas'); grainTile.width = grainTile.height = 200;
@@ -1073,6 +1138,7 @@
     // Freeze the snake as it is right now
     shareSnake = { members: mine.members.map(p => ({ ...p })) };
     $('caption').value = makeCaption(mine);
+    $('copyInvite').hidden = !handleOf(myPid);
     $('shareModal').hidden = false;
     await renderShare();
   });
@@ -1085,6 +1151,11 @@
   $('copyCap').addEventListener('click', async () => {
     try { await navigator.clipboard.writeText($('caption').value); toast('Caption copied'); }
     catch { $('caption').select(); toast('Select the caption and copy it'); }
+  });
+  $('copyInvite').addEventListener('click', async () => {
+    const url = 'https://' + inviteLink();
+    try { await navigator.clipboard.writeText(url); toast('Invite link copied: friends who open it join your snake'); }
+    catch { toast(url); }
   });
   $('saveImg').addEventListener('click', () => {
     if (!shareCanvas) return;

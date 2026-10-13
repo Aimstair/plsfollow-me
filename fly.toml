@@ -3,6 +3,14 @@
 app = "plsfollow-me"
 primary_region = "sin"
 
+[env]
+  DATA_DIR = "/data"
+
+# Small disk for the hall of fame so it survives deploys and restarts
+[mounts]
+  source = "pf_data"
+  destination = "/data"
+
 [http_service]
   internal_port = 8080
   force_https = true
