@@ -8,20 +8,20 @@ const CFG = {
   TICK_MS: 50,
   LEAD_MS: 30000, // every head leads for exactly this long
   RACE_MS: 10000, // the last part of a turn is the race for next head
-  SPEED: 190, TURN: 4.6, SPACING: 34, HIT: 30, SELF_SKIP: 8, // tails are ~80% of the head's size
+  SPEED: 190, TURN: 4.6, SPACING: 34, HIT: 30, SELF_SKIP: 4, // a head can bite its own body from the 5th segment back // tails are ~80% of the head's size
   TURN_HUMAN: 6.2, // players turn a bit faster than the bots (TURN)
   KNOCK_SPEED: 520, KNOCK_STUN_MS: 450, // getting your tail stolen shoves your head away
   SOLO_MS: 30000, BUMP_COST_MS: 5000, // a head with no tail has 30s to get one; head bumps between two of them cost 5s each
   GRACE_MS: 1500, STEAL_GRACE_MS: 800,
   BOOST_MS: 3000, BOOST: 1.6, BOLT_HIT: 32,
-  // Five trolls wander the map at random, keeping far apart. Head bump: the leader loses time.
+  // Eight trolls wander the map at random, keeping apart. Head bump: the leader loses time.
   // Body hit: the snake breaks. A head with no tail gets knocked out.
-  TROLL_COUNT: 5, TROLL_APART: 0.6, // keep at least this fraction of the arena radius between trolls
+  TROLL_COUNT: 8, TROLL_APART: 0.45, // keep at least this fraction of the arena radius between trolls
   CHAT_MAX: 80, CHAT_GAP_MS: 1200,
   TROLL_SPEED: 90, TROLL_TURN: 2,
   TROLL_HEAD_HIT: 36, TROLL_BODY_HIT: 31, TROLL_COOL_MS: 4000, TROLL_TIME_COST_MS: 5000,
   AUTOPILOT_MS: 1000, AFK_MS: 8000,
-  MIN_REACTION_MS: 120, GO_WARN_MS: 1200,
+  TAP_RATE: 13, TAP_BURST: 5, // tap race: at most ~13 taps a second count (a fast human; autoclickers get no edge)
   SOLO_SPAWN_CHANCE: 0.1, // a new player sometimes starts as their own lone head instead of joining a tail
 };
 const PLATFORMS = new Set(['ig', 'tt', 'x', 'th', 'yt', 'tw']);
@@ -82,9 +82,14 @@ class Game {
     if (n) h.angle = Math.atan2(h.y - n.y, h.x - n.x);
     h.target = h.angle;
     s.leaderSince = this.now; s.boostUntil = 0; s.turn = (s.turn + 1) & 255;
+    s.path = null; // new head: the trail starts again from the body as it is now
     // Leading real people counts toward the hall of fame
     if (h.handle && !h.bot && s.members.length > 1) this.fame.led(h.handle, h.platform, s.members.length);
-    s.race = { entries: new Map(), goAt: this.now + CFG.LEAD_MS - CFG.RACE_MS + rand(1500, 5500), warned: false, dirty: false };
+    // The tap race runs for the whole turn. Everyone in the snake right now is in it; anyone who
+    // arrives later (joined, stolen, captured) waits for the next leader.
+    s.race = { entries: new Map(), eligible: new Set(), dirty: true };
+    const msg = JSON.stringify({ t: 'raceOpen', sid: s.id, turn: s.turn });
+    for (let i = 1; i < s.members.length; i++) { const p = s.members[i]; s.race.eligible.add(p.pid); if (p.client) this.sendRaw(p.client, msg); }
   }
 
   endTurn(s, why) {
@@ -96,13 +101,14 @@ class Game {
     let next = win ? win.p : m.find(p => this.active(p)) || m[0];
     if (next !== m[0]) { m.splice(m.indexOf(next), 1); m.unshift(next); }
     this.promote(s);
-    this.event({ k: 'turn', sid: s.id, head: m[0].pid, prev: old.pid, ms: win ? win.ms : 0, why });
+    this.event({ k: 'turn', sid: s.id, head: m[0].pid, prev: old.pid, taps: win ? win.n : 0, why });
   }
 
+  // Most taps wins; a tie goes to whoever got there first
   raceWinner(s) {
     let best = null;
     for (const e of s.race.entries.values()) {
-      if (e.ms > 0 && (!best || e.ms < best.ms) && e.p !== s.members[0] && s.members.includes(e.p)) best = e;
+      if (e.n > 0 && (!best || e.n > best.n || (e.n === best.n && e.at < best.at)) && e.p !== s.members[0] && s.members.includes(e.p)) best = e;
     }
     return best;
   }
@@ -215,8 +221,6 @@ class Game {
           }
           // Head bump: the leader's turn gets shorter, so the race comes sooner
           s.leaderSince -= CFG.TROLL_TIME_COST_MS;
-          const r = s.race;
-          if (!r.warned) r.goAt = Math.max(r.goAt - CFG.TROLL_TIME_COST_MS, this.now + CFG.GO_WARN_MS + 200);
           s.grace = this.now + 600;
           this.event({ k: 'troll', sid: s.id, head: h.pid, ms: CFG.TROLL_TIME_COST_MS, x: Math.round(h.x), y: Math.round(h.y) });
           break;
@@ -247,7 +251,7 @@ class Game {
     this.house.tick();
     let segs = 0; for (const s of this.snakes) segs += s.members.length;
     this.arenaR += (this.radiusFor(segs) - this.arenaR) * 0.01;
-    const wantBolts = Math.min(30, 6 + Math.floor(Math.sqrt(segs)));
+    const wantBolts = Math.min(33, 9 + Math.floor(Math.sqrt(segs))); // ⚡ boosts on the map
     while (this.bolts.length < wantBolts) this.bolts.push(this.spawnBolt());
     if (this.bolts.length > wantBolts) this.bolts.length = wantBolts;
 
@@ -271,19 +275,48 @@ class Game {
     if (s.members.length > 1 && this.now - h.lastInput > CFG.AFK_MS && s.members.some(p => p !== h && this.active(p))) { this.endTurn(s, 'afk'); return; }
     if (this.now - s.leaderSince >= CFG.LEAD_MS) { this.endTurn(s, 'time'); return; }
     const r = s.race;
-    // When the race opens, whoever is in the snake right then is in it. Anyone who arrives later
-    // (joined, stolen, captured) waits for the next round.
-    if (!r.eligible && this.now >= s.leaderSince + CFG.LEAD_MS - CFG.RACE_MS) {
-      r.eligible = new Set();
-      const msg = JSON.stringify({ t: 'raceOpen', sid: s.id, turn: s.turn });
-      for (let i = 1; i < s.members.length; i++) { const p = s.members[i]; r.eligible.add(p.pid); if (p.client) this.sendRaw(p.client, msg); }
+    // Anyone who left this snake mid-race (stolen, captured, absorbed) loses their taps for good
+    if (r.eligible.size) {
+      const here = new Set(s.members.map(p => p.pid));
+      for (const pid of r.eligible) if (!here.has(pid)) { r.eligible.delete(pid); if (r.entries.delete(pid)) r.dirty = true; }
     }
-    if (r.eligible && !r.warned && this.now >= r.goAt - CFG.GO_WARN_MS) {
-      r.warned = true;
-      // The green moment goes out shortly before it happens, so everyone's pad turns green together
-      const msg = JSON.stringify({ t: 'go', sid: s.id, turn: s.turn, at: r.goAt });
-      for (let i = 1; i < s.members.length; i++) { const p = s.members[i]; if (p.client && r.eligible.has(p.pid)) this.sendRaw(p.client, msg); }
+  }
+
+  // Trail following: the snake remembers where its head has been, and every segment rides that
+  // trail at a fixed distance behind the head. Tight loops keep the whole body moving along the
+  // exact same curve. Segments that just arrived (stolen, joined) glide onto the trail; any segment
+  // past the end of the remembered trail falls back to following the one in front of it.
+  follow(s, dt) {
+    const m = s.members, h = m[0];
+    // Trail is stored oldest-first; seeded from the current body when a snake forms or changes head
+    if (!s.path) { s.path = []; for (let i = m.length - 1; i >= 0; i--) s.path.push({ x: m[i].x, y: m[i].y }); }
+    const P = s.path, last = P[P.length - 1];
+    if (!last || Math.hypot(h.x - last.x, h.y - last.y) >= 3) P.push({ x: h.x, y: h.y });
+    else { last.x = h.x; last.y = h.y; }
+    const glide = CFG.SPEED * 3 * dt, first = CFG.SPACING + 20; // first follower sits further back so the head never hides them
+    let j = P.length - 1, acc = 0, px = h.x, py = h.y;
+    for (let i = 1; i < m.length; i++) {
+      const want = first + (i - 1) * CFG.SPACING, p = m[i];
+      while (j >= 0) {
+        const q = P[j], seg = Math.hypot(q.x - px, q.y - py);
+        if (acc + seg >= want) break;
+        acc += seg; px = q.x; py = q.y; j--;
+      }
+      let tx, ty;
+      if (j >= 0) {
+        const q = P[j], seg = Math.hypot(q.x - px, q.y - py) || 1, f = (want - acc) / seg;
+        tx = px + (q.x - px) * f; ty = py + (q.y - py) * f;
+      } else {
+        // Off the end of the trail: keep a link's distance from the segment in front
+        const a = m[i - 1], dx = a.x - p.x, dy = a.y - p.y, dist = Math.hypot(dx, dy), gap = i === 1 ? first : CFG.SPACING;
+        if (dist > gap) { const mv = Math.min(dist - gap, glide); p.x += dx / dist * mv; p.y += dy / dist * mv; }
+        continue;
+      }
+      const dx = tx - p.x, dy = ty - p.y, dist = Math.hypot(dx, dy);
+      if (dist <= glide) { p.x = tx; p.y = ty; } else { p.x += dx / dist * glide; p.y += dy / dist * glide; }
     }
+    // Forget trail older than the body needs
+    if (j > 8) P.splice(0, j - 4);
   }
 
   spawnBolt() {
@@ -319,12 +352,7 @@ class Game {
     h.x += Math.cos(h.angle) * sp * dt; h.y += Math.sin(h.angle) * sp * dt;
     const r = Math.hypot(h.x, h.y);
     if (r > this.arenaR) { h.x *= this.arenaR / r; h.y *= this.arenaR / r; }
-    for (let i = 1; i < m.length; i++) {
-      // The first follower keeps extra distance so the head's ring and crown never hide them
-      const gap = i === 1 ? CFG.SPACING + 20 : CFG.SPACING;
-      const a = m[i - 1], p = m[i], dx = a.x - p.x, dy = a.y - p.y, dist = Math.hypot(dx, dy);
-      if (dist > gap) { const mv = Math.min(dist - gap, CFG.SPEED * 2.5 * dt); p.x += dx / dist * mv; p.y += dy / dist * mv; }
-    }
+    this.follow(s, dt);
     for (let i = 0; i < this.bolts.length; i++) {
       const b = this.bolts[i];
       if (Math.abs(b.x - h.x) < CFG.BOLT_HIT && Math.abs(b.y - h.y) < CFG.BOLT_HIT && Math.hypot(b.x - h.x, b.y - h.y) < CFG.BOLT_HIT) {
@@ -391,31 +419,34 @@ class Game {
   }
 
   // ---------- Race ----------
-  tap(c, m) {
+  // Tap race: clients send how many taps they made since the last message. The server only counts
+  // what a human hand could do (a refilling budget of TAP_RATE per second).
+  taps(c, m) {
     const p = c.player; if (!p) return;
     const s = this.snakeOf(p);
-    const reply = (ok, extra) => this.send(c, { t: 'tapr', ok, ...extra });
-    if (!s || s.members[0] === p || s.id !== m.sid || s.turn !== m.turn) return reply(false, { why: 'turn' });
+    if (!s || s.members[0] === p || s.id !== m.sid || s.turn !== m.turn) return;
     const r = s.race;
-    if (r.entries.has(p.pid) || this.now < s.leaderSince + CFG.LEAD_MS - CFG.RACE_MS) return reply(false, { why: 'closed' });
-    if (!r.eligible || !r.eligible.has(p.pid)) return reply(false, { why: 'late' });
-    const ms = Math.round(Number(m.ms));
-    if (!Number.isFinite(ms)) return;
-    if (ms < 0 || this.now < r.goAt - 300) { r.entries.set(p.pid, { p, ms: -1 }); return reply(false, { why: 'early' }); }
-    // Each client times its own reaction. The claimed time must fit when the tap actually arrived.
-    const lag = this.now - r.goAt - ms;
-    if (ms < CFG.MIN_REACTION_MS || lag < -400 || lag > (c.rtt || 300) + 500) { r.entries.set(p.pid, { p, ms: -1 }); return reply(false, { why: 'invalid' }); }
-    r.entries.set(p.pid, { p, ms }); r.dirty = true;
-    let rank = 1; for (const e of r.entries.values()) if (e.ms > 0 && e.ms < ms) rank++;
-    reply(true, { ms, rank });
+    if (!r.eligible.has(p.pid)) return this.send(c, { t: 'tapr', ok: false, why: 'late' });
+    const n = Math.floor(Number(m.n));
+    if (!Number.isFinite(n) || n < 1) return;
+    let e = r.entries.get(p.pid);
+    if (!e) { e = { p, n: 0, at: 0, budget: CFG.TAP_BURST, last: this.now }; r.entries.set(p.pid, e); }
+    e.budget = Math.min(CFG.TAP_BURST, e.budget + (this.now - e.last) / 1000 * CFG.TAP_RATE); e.last = this.now;
+    const add = Math.min(n, Math.floor(e.budget));
+    if (add <= 0) return;
+    e.budget -= add; e.n += add; e.at = this.now; r.dirty = true;
   }
 
   flushRaceBoards() {
     for (const s of this.snakes) {
-      const r = s.race; if (!r.dirty) continue; r.dirty = false;
-      const top = [...r.entries.values()].filter(e => e.ms > 0 && s.members.includes(e.p)).sort((a, b) => a.ms - b.ms).slice(0, 3).map(e => [e.p.pid, e.ms]);
+      const r = s.race; if (!r.dirty || this.now - (r.flushAt || 0) < 200) continue; r.dirty = false; r.flushAt = this.now;
+      const top = [...r.entries.values()].filter(e => e.n > 0).sort((a, b) => b.n - a.n || a.at - b.at).slice(0, 3).map(e => [e.p.pid, e.n]);
       const msg = JSON.stringify({ t: 'race', sid: s.id, turn: s.turn, top, n: r.entries.size });
-      for (const p of s.members) if (p.client) this.sendRaw(p.client, msg);
+      for (const p of s.members) if (p.client) {
+        // each racer also learns their own count as the server sees it
+        const e = r.entries.get(p.pid);
+        this.sendRaw(p.client, e ? msg.slice(0, -1) + `,"mine":${e.n}}` : msg);
+      }
     }
   }
 
@@ -486,7 +517,7 @@ class Game {
         if (p && (d === -1 || d === 0 || d === 1)) { p.turnDir = d; p.steerMode = 'k'; p.lastSteer = this.now; }
         return;
       }
-      case 'tap': return this.tap(c, m);
+      case 'taps': return this.taps(c, m);
       case 'open': return this.open(c, m);
       case 'fameOpen': return this.fameOpen(c, m);
       case 'chat': return this.chat(c, m);

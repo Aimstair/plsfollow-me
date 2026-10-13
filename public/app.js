@@ -219,9 +219,8 @@
         break;
       }
       case 'ev': m.l.forEach(onEvent); break;
-      case 'go': onGo(m); break;
       case 'raceOpen': raceOk.add(keyOf(m.sid, m.turn)); break;
-      case 'race': raceTop = m; break;
+      case 'race': onRaceBoard(m); break;
       case 'tapr': onTapResult(m); break;
       case 'opened':
         if (spot) {
@@ -283,7 +282,7 @@
       // You raced this turn and someone else got the crown
       if (myEntry && myEntry.sid === e.sid && e.head !== myPid) sfx('lose');
       myEntry = null;
-      if (e.ms && e.head !== myPid) toast(`⚔️ ${name(e.head)} won the race in ${e.ms} ms and is the new head`);
+      if (e.taps && e.head !== myPid) toast(`⚔️ ${name(e.head)} won the tap race with ${e.taps} taps and is the new head`);
     }
   }
 
@@ -335,7 +334,7 @@
   addEventListener('keydown', e => {
     if (typing(e)) return;
     keys[e.key] = true;
-    if (race && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); padPress(); return; }
+    if (race && !$('duel').hidden && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); if (!e.repeat) padPress(); return; }
     if (e.key === 'Enter' && myPid && $('intro').hidden && $('shareModal').hidden) { e.preventDefault(); openChat(); }
   });
   addEventListener('keyup', e => { keys[e.key] = false; });
@@ -356,64 +355,69 @@
     send({ t: 'k', d: 0 }); // no input: keep going straight
   }, 50);
 
-  // ---------- Race for next head ----------
-  let race = null, goInfo = null, raceTop = null, padTimer = 0, doneTimer = 0;
-  const raced = new Set();
+  // ---------- Tap race for next head ----------
+  // In the leader's last 10 seconds, everyone who was in the snake when it opened taps as fast as they
+  // can. Most taps when the timer runs out leads next. Taps go to the server in small batches.
+  let race = null, raceTop = null, tapTimer = 0;
   const raceOk = new Set(); // races we're in (we were in the snake when it opened)
-  let myEntry = null; // a valid race time of ours in the current turn
+  const hiddenRace = new Set(); // races whose pop-up we closed (still racing via the race bar)
+  let myEntry = null; // we tapped in the current turn's race (for the "you lost" sound)
   const keyOf = (sid, turn) => `${sid}:${turn}`;
-  const raceLive = s => s.left <= RACE_MS;
+  const raceOn = s => s.members.length > 1;     // the tap race runs the whole turn
+  const lastStretch = s => s.left <= RACE_MS;   // final seconds: the head's timer ring flashes
   function openRace(s) {
     const key = keyOf(s.id, s.turn);
-    if (raced.has(key)) return;
-    clearTimeout(doneTimer);
-    race = { key, sid: s.id, turn: s.turn, state: 'wait' };
-    $('duelHint').textContent = 'Everyone in the snake is racing right now. Tap the moment it turns green. The fastest tap becomes the next head.';
-    $('duelResult').textContent = '';
-    const pad = $('pad'); pad.className = ''; pad.textContent = 'Get ready…'; pad.disabled = false;
-    $('duel').hidden = false; pad.focus(); sfx('ready');
-    if (goInfo && keyOf(goInfo.sid, goInfo.turn) === key) scheduleGo();
+    hiddenRace.delete(key);
+    if (!race || race.key !== key) {
+      race = { key, sid: s.id, turn: s.turn, count: 0, unsent: 0, wasFirst: false };
+      $('duelResult').textContent = 'Go go go!';
+      const pad = $('pad'); pad.className = 'go'; pad.textContent = 'TAP!'; pad.disabled = false;
+      sfx('go');
+      clearInterval(tapTimer); tapTimer = setInterval(flushTaps, 150);
+    }
+    $('duelHint').textContent = 'Tap anywhere, as fast as you can! Most taps when the timer runs out leads next.';
+    $('duel').hidden = false; $('pad').focus();
   }
-  function onGo(m) { goInfo = m; if (race && race.key === keyOf(m.sid, m.turn) && race.state === 'wait') scheduleGo(); }
-  function scheduleGo() {
-    clearTimeout(padTimer);
-    const wait = goInfo.at - offset - performance.now();
-    padTimer = setTimeout(() => {
-      if (!race || race.state !== 'wait') return;
-      race.state = 'go';
-      const pad = $('pad'); pad.className = 'go'; pad.textContent = 'TAP!'; sfx('go');
-      race.shownAt = performance.now();
-      padTimer = setTimeout(() => finishRace(-2), Math.max(500, (mine ? mine.left : 3000) - 300));
-    }, Math.max(0, wait));
+  function padPress(x, y) {
+    if (!race) return;
+    race.count++; race.unsent++;
+    const pad = $('pad'); pad.textContent = race.count;
+    pad.classList.remove('bump'); void pad.offsetWidth; pad.classList.add('bump');
+    if (window.PFAudio) PFAudio.tap(race.count);
+    myEntry = { sid: race.sid };
+    // "+1" and a ripple where the finger landed (or on the counter, for keyboard taps)
+    if (x == null) { const r = pad.getBoundingClientRect(); x = r.left + r.width / 2; y = r.top + r.height * .3; }
+    const layer = $('tapfx');
+    while (layer.childElementCount > 40) layer.firstChild.remove();
+    const ring = document.createElement('i'); ring.className = 'ring'; ring.style.left = x + 'px'; ring.style.top = y + 'px';
+    const plus = document.createElement('b'); plus.textContent = '+1'; plus.style.left = x + (Math.random() * 24 - 12) + 'px'; plus.style.top = y + 'px';
+    plus.style.setProperty('--h', `${(race.count * 23) % 360}`);
+    layer.append(ring, plus);
+    setTimeout(() => { ring.remove(); plus.remove(); }, 700);
+    if (race.count % 10 === 0) { pad.classList.remove('combo'); void pad.offsetWidth; pad.classList.add('combo'); }
   }
-  function padPress() {
-    if (!race || race.state === 'done') return;
-    clearTimeout(padTimer);
-    finishRace(race.state === 'wait' ? -1 : Math.round(performance.now() - race.shownAt));
+  // During the race the whole screen is the button
+  $('duel').addEventListener('pointerdown', e => {
+    if (e.target.closest('#duelClose')) return;
+    e.preventDefault(); padPress(e.clientX, e.clientY);
+  });
+  $('duelClose').addEventListener('click', () => { if (race) { hiddenRace.add(race.key); flushTaps(); } $('duel').hidden = true; });
+  function flushTaps() {
+    if (race && race.unsent) { send({ t: 'taps', sid: race.sid, turn: race.turn, n: race.unsent }); race.unsent = 0; }
   }
-  $('pad').addEventListener('pointerdown', e => { e.preventDefault(); padPress(); });
-  function finishRace(ms) {
-    const r = race; r.state = 'done'; raced.add(r.key);
-    const pad = $('pad'); pad.className = 'done'; pad.disabled = true;
-    pad.textContent = ms === -1 ? 'Too early!' : ms === -2 ? 'Too slow!' : `${ms} ms`;
-    sfx(ms < 0 ? 'miss' : 'tap');
-    if (ms !== -2) send({ t: 'tap', sid: r.sid, turn: r.turn, ms });
-    $('duelResult').textContent = ms === -1 ? 'You tapped before green. You can race again next turn.' : ms === -2 ? 'No tap this time. You can race again next turn.' : 'Checking…';
-    if (ms < 0) doneTimer = setTimeout(closeRace, 1600);
+  function onRaceBoard(m) {
+    raceTop = m;
+    if (typeof m.mine === 'number') stats.best = Math.max(stats.best, m.mine);
+    if (!race || keyOf(m.sid, m.turn) !== race.key) return;
+    const first = m.top[0], mineN = typeof m.mine === 'number' ? m.mine : 0, amFirst = first && first[0] === myPid;
+    if (amFirst && !race.wasFirst) sfx('win');
+    race.wasFirst = amFirst;
+    $('duelResult').textContent = amFirst ? `👑 You're in first with ${first[1]} taps!` : first ? `You: ${mineN} · 1st: ${name(first[0])} with ${first[1]}` : 'Go go go!';
   }
   function onTapResult(m) {
-    if (!race) return;
-    if (m.ok) {
-      stats.best = stats.best ? Math.min(stats.best, m.ms) : m.ms;
-      if (m.rank === 1) sfx('win');
-      if (race) myEntry = { sid: race.sid };
-      $('duelResult').textContent = m.rank === 1 ? "You're in first so far! The winner is announced when the turn ends 👑" : `You're #${m.rank} so far.`;
-    } else {
-      $('duelResult').textContent = m.why === 'early' ? 'Too early. You can race again next turn.' : m.why === 'invalid' ? "That tap didn't count (connection hiccup). Try next turn." : m.why === 'late' ? "This race started before you arrived. You're in the next one!" : 'The turn ended before your tap arrived.';
-    }
-    clearTimeout(doneTimer); doneTimer = setTimeout(closeRace, 1800);
+    if (m.why === 'late') $('duelResult').textContent = "This race started before you arrived. You're in the next one!";
   }
-  function closeRace() { clearTimeout(padTimer); $('duel').hidden = true; race = null; }
+  function closeRace() { flushTaps(); clearInterval(tapTimer); $('duel').hidden = true; race = null; }
 
   // ---------- Peek + follow ----------
   let peekFor = 0, peekTimer = 0;
@@ -650,7 +654,7 @@
     ctx.beginPath(); ctx.arc(h.x, h.y, HEAD_R + 3.5, 0, TAU); ctx.fillStyle = platRing(h.pid, h.x, h.y); ctx.fill();
     ctx.drawImage(avatar(h.pid), h.x - HEAD_R, h.y - HEAD_R, HEAD_R * 2, HEAD_R * 2);
     // turn timer ring
-    const frac = Math.max(0, s.left / LEAD_MS), live = raceLive(s);
+    const frac = Math.max(0, s.left / LEAD_MS), live = lastStretch(s);
     ctx.lineCap = 'round';
     ctx.beginPath(); ctx.arc(h.x, h.y, HEAD_R + 9, 0, TAU); ctx.lineWidth = 3.5; ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.stroke();
     ctx.beginPath(); ctx.arc(h.x, h.y, HEAD_R + 9, -Math.PI / 2, -Math.PI / 2 + frac * TAU); ctx.lineWidth = 3.5;
@@ -842,8 +846,10 @@
     }
   }
   function raceCheck() {
-    if (race && (!mine || keyOf(mine.id, mine.turn) !== race.key) && race.state !== 'done') closeRace();
-    if (me && myIdx > 0 && raceLive(mine) && mine.left > 600 && !race && raceOk.has(keyOf(mine.id, mine.turn)) && !raced.has(keyOf(mine.id, mine.turn))) openRace(mine);
+    if (race && (!mine || myIdx === 0 || keyOf(mine.id, mine.turn) !== race.key || !raceOn(mine))) closeRace();
+    const k = mine && keyOf(mine.id, mine.turn);
+    if (me && myIdx > 0 && raceOn(mine) && mine.left > 300 && !race && raceOk.has(k) && !hiddenRace.has(k)) openRace(mine);
+    if (race) $('duelTime').textContent = fmt(mine.left);
   }
 
   // ---------- HUD ----------
@@ -868,20 +874,20 @@
     const ranked = raceTop && mine && raceTop.sid === mine.id && raceTop.turn === mine.turn ? raceTop.top : [];
     if (mine && online) {
       st.hidden = false;
-      const left = mine.left, head = mine.members[0], live = raceLive(mine), key = keyOf(mine.id, mine.turn);
+      const left = mine.left, head = mine.members[0], live = raceOn(mine), key = keyOf(mine.id, mine.turn);
       if (myIdx === 0) {
         st.className = 'glass lead';
         const alone = view.snakes.length < 2;
-        st.textContent = mine.members.length > 1 ? (live ? `👑 Your followers are racing for your spot · ${fmt(left)}` : `👑 You're the head · ${fmt(left)} · grab ⚡ to go faster`)
+        st.textContent = mine.members.length > 1 ? (lastStretch(mine) ? `👑 Your followers are tapping for your spot · ${fmt(left)}` : `👑 You're the head · ${fmt(left)} · grab ⚡ to go faster`)
           : alone ? "👑 You're the only one here. Your 30s timer starts when someone else joins."
           : `⏱ Get a tail in ${fmt(left)} or it's game over! Hit a snake's body to steal people.`;
         st.classList.toggle('urgent', mine.members.length === 1 && !alone && left <= RACE_MS);
       } else {
         st.className = 'glass';
         const inRace = raceOk.has(key);
-        st.textContent = ranked[0] && ranked[0][0] === myPid ? `🔥 You're winning the race. You lead in ${fmt(left)}`
-          : live && !inRace ? `You're #${myIdx + 1} of ${mine.members.length} · you're in the next race (${fmt(left)})`
-          : `You're #${myIdx + 1} of ${mine.members.length} · race ${live ? 'is LIVE' : 'starts in ' + fmt(left - RACE_MS)}`;
+        st.textContent = ranked[0] && ranked[0][0] === myPid ? `🔥 You're winning the tap race. You lead in ${fmt(left)}`
+          : !inRace ? `You're #${myIdx + 1} of ${mine.members.length} · you're in the next tap race (${fmt(left)})`
+          : `You're #${myIdx + 1} of ${mine.members.length} · tap race · new leader in ${fmt(left)}`;
       }
 
       const sp = $('spot');
@@ -903,21 +909,21 @@
       $('spotOpens').hidden = !(myIdx === 0 && hd);
       $('spotOpensN').textContent = spot ? spot.opens : 0;
 
-      $('race').classList.toggle('live', live);
+      $('race').classList.toggle('live', live && lastStretch(mine));
       const lone = mine.members.length === 1;
-      $('raceCloses').textContent = lone ? (view.snakes.length < 2 ? '⏸ Timer paused: nobody else here yet' : `⏱ ${fmt(left)} to get a tail`) : live ? `🔴 Race LIVE · ${fmt(left)}` : `⚔️ Race starts in ${fmt(left - RACE_MS)}`;
+      $('raceCloses').textContent = lone ? (view.snakes.length < 2 ? '⏸ Timer paused: nobody else here yet' : `⏱ ${fmt(left)} to get a tail`) : `👆 Tap race · new leader in ${fmt(left)}`;
       const list = $('raceList'); list.textContent = '';
       if (live && ranked.length) for (let i = 0; i < 3; i++) {
         const e = ranked[i], li = document.createElement('li');
         li.className = !e ? 'slot' : e[0] === myPid ? 'mine' : i === 0 ? 'first' : '';
         const top = document.createElement('span'); top.className = 'pos'; top.textContent = i === 0 ? '👑 1st' : i === 1 ? '2nd' : '3rd';
         const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = e ? name(e[0]) : '—';
-        const ms = document.createElement('span'); ms.className = 'ms'; ms.textContent = e ? `${e[1]} ms` : '';
+        const ms = document.createElement('span'); ms.className = 'ms'; ms.textContent = e ? `${e[1]} taps` : '';
         li.append(top, nm, ms); list.append(li);
       } else {
         const li = document.createElement('li'); li.className = 'empty';
         li.textContent = mine.members.length === 1 ? 'Hit another snake’s body to steal its people. Head bumps with other lone heads cost you both 5s.'
-          : live ? (myIdx === 0 ? 'Your followers are racing…' : !raceOk.has(key) ? "Race in progress. You're in the next one!" : raced.has(key) ? 'Waiting for times…' : 'Tap here to race!') : 'Everyone races in the last 10 seconds. Fastest tap leads next.';
+          : myIdx === 0 ? 'Your followers are tapping for your spot…' : !raceOk.has(key) ? "Race in progress. You're in the next one!" : 'Tap anywhere! Most taps when the timer ends leads next.';
         list.append(li);
       }
     } else if (online) st.hidden = true;
@@ -1070,7 +1076,7 @@
   }
   $('race').addEventListener('click', e => {
     if (e.target.closest('#share')) return;
-    if (!mine || race || myIdx === 0 || !raceLive(mine)) return;
+    if (!mine || myIdx === 0 || !raceOn(mine)) return;
     if (!raceOk.has(keyOf(mine.id, mine.turn))) { toast("This race started before you arrived. You're in the next one!"); return; }
     openRace(mine);
   });
@@ -1176,7 +1182,7 @@
     const opens = stats.opens + (spot ? spot.opens : 0);
     const tiles = [
       [led ? `${stats.led}×` : `no. ${pos}`, led ? 'times I led' : 'my spot'],
-      [stats.best ? `${stats.best}ms` : `${n}`, stats.best ? 'fastest tap' : 'in my snake'],
+      [stats.best ? `${stats.best}` : `${n}`, stats.best ? 'tap record' : 'in my snake'],
       [myHandle ? `${opens}` : `${view.snakes.length}`, myHandle ? 'profile opens' : 'snakes alive'],
     ];
     const cw = (Wc - 144) / 3;

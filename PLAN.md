@@ -16,7 +16,7 @@ right away, and produce moments worth screenshotting and sharing.
 |---|---|
 | Join | Visitors are added to the tail of the **biggest** snake. |
 | Steer | Only the head steers, using mouse, finger or arrow keys. Everyone else follows the segment in front of them. |
-| Leadership | Each head gets exactly 30s. The last 10s are the race for next head (section 3a). The winner leads next, and the old head goes to the tail. If nobody races, the next *active* human in line leads. Bots and AFK users are skipped. |
+| Leadership | Each head gets exactly 30s. During the whole turn, everyone who was in the snake when the turn began can tap anywhere on screen; most taps when the timer ends leads next (ties go to whoever got there first; ~13 taps/s max count). Counts reset each turn, and leaving the snake mid-turn wipes yours. The winner leads next, and the old head goes to the tail. If nobody races, the next *active* human in line leads. Bots and AFK users are skipped. |
 | AFK | A head that sends no input for 1s goes on autopilot (wanders, avoids walls). After 8s idle, leadership passes to the next active human. |
 | Self-bite | If the head touches its own body (segment ≥ 10), the snake splits. Everything behind the bite becomes a new snake, and the bitten segment becomes its head. |
 | Steal | If a head touches another snake's body at segment k, everything from k to the tail is taken and attached to the attacker's tail. |
@@ -26,7 +26,7 @@ right away, and produce moments worth screenshotting and sharing.
 | Arena | A circle whose radius grows with player count (`700 + 30·√N`). Heads slide along the wall. |
 | Hosts | The site's own accounts (@ericmar.g on Threads; @maisoncarte_official + @clipit_app on TikTok, sharing a snake) are played by the server: they roam, chase boosts, dodge trolls, steal, and sometimes fight each other. Tagged ✦ host, counted as online, kept off the hall of fame, handles reserved. Knocked out → back in 8s. |
 | Join | 10% of new players start as a lone head instead of joining the biggest snake's tail. |
-| Trolls | Every snake segment is a real person. Five purple 👹 trolls wander the map at random, keeping far apart from each other. They don't chase anyone. A troll touching a head costs that leader 5 seconds of their turn. A troll touching a body breaks the snake there, and everyone behind becomes a new snake. After a hit a troll is harmless for 4s. A head with no tail that touches a troll is knocked out. |
+| Trolls | Every snake segment is a real person. Eight purple 👹 trolls wander the map at random, keeping far apart from each other. They don't chase anyone. A troll touching a head costs that leader 5 seconds of their turn. A troll touching a body breaks the snake there, and everyone behind becomes a new snake. After a hit a troll is harmless for 4s. A head with no tail that touches a troll is knocked out. |
 
 **What a new visitor sees:** if nobody else is playing, they start their own snake and lead it
 immediately. Otherwise they join the tail of the biggest snake and can win the next race, which starts in at most 20s.

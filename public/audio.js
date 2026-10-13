@@ -218,6 +218,17 @@ window.PFAudio = (() => {
       g.cancelScheduledValues(t); g.setValueAtTime(g.value, t);
       g.linearRampToValueAtTime(0.06, t + 0.15); g.setValueAtTime(0.06, t + sec); g.linearRampToValueAtTime(0.32, t + sec + 2);
     },
+    // Tap race: a bright little pop that climbs a pentatonic scale as your count goes up
+    tap(count) {
+      if (!ctx || !prefs.sfx || ctx.state !== 'running') return;
+      const t = ctx.currentTime;
+      if (lastPlayed.tap && t - lastPlayed.tap < 0.03) return;
+      lastPlayed.tap = t;
+      const scale = [0, 2, 4, 7, 9], step = (count - 1) % 15, n = 76 + scale[step % 5] + 12 * Math.floor(step / 5) * 0.5;
+      tone(mtof(Math.round(n)), t + 0.005, { type: 'triangle', dur: 0.09, gain: 0.16, verb: 0.05 });
+      tone(mtof(Math.round(n)) * 2, t + 0.005, { type: 'sine', dur: 0.05, gain: 0.06, verb: 0 });
+      if (count % 10 === 0) [0, 4, 7].forEach((d, i) => tone(mtof(Math.round(n) + 12 + d), t + 0.03 + i * 0.04, { type: 'triangle', dur: 0.25, gain: 0.1, verb: 0.3 }));
+    },
     get music() { return prefs.music; },
     get sfx() { return prefs.sfx; },
     setMusic(on) { prefs.music = on; save(); if (!ctx) return; if (on) startMusic(); else stopMusic(); },
