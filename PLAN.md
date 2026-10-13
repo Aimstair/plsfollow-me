@@ -23,7 +23,7 @@ right away, and produce moments worth screenshotting and sharing.
 | Head-on | The bigger snake captures the other head. |
 | Grace | A snake that just split or stole cannot collide for 1–1.5s. This prevents chain reactions. |
 | Arena | A circle whose radius grows with player count (`700 + 30·√N`). Heads slide along the wall. |
-| Trolls | Every snake segment is a real person. Purple 👹 trolls roam the map (6, plus one per 12 players) and drift toward heads. A troll touching a head costs that leader 5 seconds of their turn. A troll touching a body breaks the snake there, and everyone behind becomes a new snake. After a hit a troll backs off for 4s. |
+| Trolls | Every snake segment is a real person. Three purple 👹 trolls wander the map at random, keeping far apart from each other. They don't chase anyone. A troll touching a head costs that leader 5 seconds of their turn. A troll touching a body breaks the snake there, and everyone behind becomes a new snake. After a hit a troll is harmless for 4s. A head with no tail that touches a troll is knocked out. |
 
 **What a new visitor sees:** if nobody else is playing, they start their own snake and lead it
 immediately. Otherwise they join the tail of the biggest snake and can win the next race, which starts in at most 20s.

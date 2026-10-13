@@ -9,9 +9,10 @@ const CFG = {
   SPEED: 190, TURN: 4.6, SPACING: 21, HIT: 22, SELF_SKIP: 10,
   GRACE_MS: 1500, STEAL_GRACE_MS: 800,
   BOOST_MS: 3000, BOOST: 1.6, BOLT_HIT: 28,
-  // Trolls roam the map and drift toward snakes. Head bump: the leader loses time. Body hit: the snake breaks.
-  TROLL_BASE: 6, TROLL_PER_HUMANS: 12, TROLL_MAX: 30,
-  TROLL_SPEED: 90, TROLL_TURN: 2, TROLL_SIGHT: 450,
+  // Three trolls wander the map at random, keeping far apart. Head bump: the leader loses time.
+  // Body hit: the snake breaks. A head with no tail gets knocked out.
+  TROLL_COUNT: 3, TROLL_APART: 0.8, // keep at least this fraction of the arena radius between trolls
+  TROLL_SPEED: 90, TROLL_TURN: 2,
   TROLL_HEAD_HIT: 34, TROLL_BODY_HIT: 26, TROLL_COOL_MS: 4000, TROLL_TIME_COST_MS: 5000,
   AUTOPILOT_MS: 1000, AFK_MS: 8000,
   MIN_REACTION_MS: 120, GO_WARN_MS: 1200,
@@ -101,41 +102,41 @@ class Game {
 
   // ---------- Trolls ----------
   spawnTroll() {
-    // Appear away from every head so nobody gets hit out of nowhere
+    // The spot farthest from the other trolls and from every head
     let best = null;
-    for (let tries = 0; tries < 8; tries++) {
-      const a = rand(0, TAU), r = Math.sqrt(Math.random()) * this.arenaR * 0.9;
-      const t = { x: Math.cos(a) * r, y: Math.sin(a) * r, angle: rand(0, TAU), wob: 0, coolUntil: this.now + 1500 };
-      const d = Math.min(Infinity, ...this.snakes.map(s => Math.hypot(s.members[0].x - t.x, s.members[0].y - t.y)));
-      if (!best || d > best.d) best = { t, d };
-      if (d > 500) break;
+    for (let tries = 0; tries < 24; tries++) {
+      const a = rand(0, TAU), r = rand(0.35, 0.75) * this.arenaR, x = Math.cos(a) * r, y = Math.sin(a) * r;
+      const d = Math.min(Infinity,
+        ...this.trolls.map(t => Math.hypot(t.x - x, t.y - y)),
+        ...this.snakes.map(s => Math.hypot(s.members[0].x - x, s.members[0].y - y) * 1.5));
+      if (!best || d > best.d) best = { x, y, d };
     }
-    return best.t;
+    return { x: best.x, y: best.y, angle: rand(0, TAU), wob: 0, coolUntil: this.now + 1500 };
   }
 
   balanceTrolls() {
-    const want = Math.min(CFG.TROLL_MAX, CFG.TROLL_BASE + Math.floor(this.humans / CFG.TROLL_PER_HUMANS));
-    while (this.trolls.length < want) this.trolls.push(this.spawnTroll());
-    if (this.trolls.length > want) this.trolls.length = want;
+    while (this.trolls.length < CFG.TROLL_COUNT) this.trolls.push(this.spawnTroll());
+    if (this.trolls.length > CFG.TROLL_COUNT) this.trolls.length = CFG.TROLL_COUNT;
   }
 
   moveTrolls(dt) {
+    const apart = this.arenaR * CFG.TROLL_APART;
     for (const t of this.trolls) {
-      const cooling = this.now < t.coolUntil;
-      // Drift toward the nearest head they can see; after a hit, back off until the cooldown ends
-      let target = null, bd = CFG.TROLL_SIGHT;
-      for (const s of this.snakes) {
-        const h = s.members[0], d = Math.hypot(h.x - t.x, h.y - t.y);
-        if (d < bd) { bd = d; target = h; }
-      }
-      t.wob = t.wob * 0.95 + (Math.random() - 0.5) * 0.3;
+      // Random wandering; they don't chase anyone
+      t.wob = t.wob * 0.97 + (Math.random() - 0.5) * 0.25;
       let want = t.angle + t.wob;
-      if (target) want = Math.atan2(target.y - t.y, target.x - t.x) + (cooling ? Math.PI : 0) + t.wob * 0.5;
+      // Steer away from any troll that gets too close, so they stay spread over the map
+      let px = 0, py = 0;
+      for (const o of this.trolls) {
+        if (o === t) continue;
+        const dx = t.x - o.x, dy = t.y - o.y, d = Math.hypot(dx, dy);
+        if (d < apart && d > 0) { const w = (apart - d) / apart; px += dx / d * w; py += dy / d * w; }
+      }
+      if (px || py) want = Math.atan2(py, px);
       if (Math.hypot(t.x, t.y) > this.arenaR * 0.85) want = Math.atan2(-t.y, -t.x);
       let d = want - t.angle; d = Math.atan2(Math.sin(d), Math.cos(d));
       const mt = CFG.TROLL_TURN * dt; t.angle += Math.max(-mt, Math.min(mt, d));
-      const sp = CFG.TROLL_SPEED * (cooling ? 0.8 : 1);
-      t.x += Math.cos(t.angle) * sp * dt; t.y += Math.sin(t.angle) * sp * dt;
+      t.x += Math.cos(t.angle) * CFG.TROLL_SPEED * dt; t.y += Math.sin(t.angle) * CFG.TROLL_SPEED * dt;
     }
   }
 
