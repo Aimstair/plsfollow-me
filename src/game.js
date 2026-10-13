@@ -10,6 +10,7 @@ const CFG = {
   RACE_MS: 10000, // the last part of a turn is the race for next head
   SPEED: 190, TURN: 4.6, SPACING: 34, HIT: 30, SELF_SKIP: 8, // tails are ~80% of the head's size
   TURN_HUMAN: 6.2, // players turn a bit faster than the bots (TURN)
+  KNOCK_SPEED: 520, KNOCK_STUN_MS: 450, // getting your tail stolen shoves your head away
   SOLO_MS: 30000, BUMP_COST_MS: 5000, // a head with no tail has 30s to get one; head bumps between two of them cost 5s each
   GRACE_MS: 1500, STEAL_GRACE_MS: 800,
   BOOST_MS: 3000, BOOST: 1.6, BOLT_HIT: 32,
@@ -307,6 +308,12 @@ class Game {
     // Keys say "keep turning left/right" (or "go straight"), applied against the live angle here,
     // so network lag can't make the client aim at where the head used to be
     else if (h.steerMode === 'k') h.target = h.angle + h.turnDir * 2;
+    if (this.now < (h.stunUntil || 0)) h.target = h.angle; // knocked back: no steering for a moment
+    if (h.kx || h.ky) {
+      h.x += h.kx * dt; h.y += h.ky * dt;
+      const decay = Math.pow(0.004, dt); h.kx *= decay; h.ky *= decay;
+      if (Math.hypot(h.kx, h.ky) < 8) h.kx = h.ky = 0;
+    }
     let d = h.target - h.angle; d = Math.atan2(Math.sin(d), Math.cos(d));
     const mt = (h.bot ? CFG.TURN : CFG.TURN_HUMAN) * dt; h.angle += Math.max(-mt, Math.min(mt, d));
     h.x += Math.cos(h.angle) * sp * dt; h.y += Math.sin(h.angle) * sp * dt;
@@ -366,7 +373,18 @@ class Game {
         const tail = t.members.splice(hit.k);
         s.members.push(...tail);
         s.grace = this.now + CFG.STEAL_GRACE_MS;
-        this.event({ k: 'steal', thief: s.id, victim: t.id, k2: hit.k, n: tail.length, x, y });
+        // Knockback: the robbed snake's head gets shoved away from the thief and briefly can't steer
+        const vh = t.members[0];
+        let kx = 0, ky = 0;
+        if (vh) {
+          let dir = Math.atan2(vh.y - h.y, vh.x - h.x);
+          if (Math.hypot(vh.x - h.x, vh.y - h.y) < 1) dir = h.angle + Math.PI / 2;
+          kx = Math.cos(dir) * CFG.KNOCK_SPEED; ky = Math.sin(dir) * CFG.KNOCK_SPEED;
+          vh.kx = kx; vh.ky = ky; vh.stunUntil = this.now + CFG.KNOCK_STUN_MS;
+          vh.angle = vh.target = Math.atan2(Math.sin(vh.angle) + Math.sin(dir), Math.cos(vh.angle) + Math.cos(dir)); // spun toward the shove
+          t.grace = Math.max(t.grace, this.now + 600);
+        }
+        this.event({ k: 'steal', thief: s.id, victim: t.id, k2: hit.k, n: tail.length, x, y, hx: vh ? Math.round(vh.x) : x, hy: vh ? Math.round(vh.y) : y });
       }
     }
     for (let i = this.snakes.length - 1; i >= 0; i--) if (!this.snakes[i].members.length) this.snakes.splice(i, 1);

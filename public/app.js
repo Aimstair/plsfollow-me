@@ -249,7 +249,8 @@
       burst(e.x, e.y, 30, ['#ff5fa2', '#ffc93c', '#fff'], { speed: 320, life: 750, size: 5 });
       if (e.victim === me0.sid && me0.idx >= e.k2) { shake.a = 12; sfx('lost'); toast(`🫳 Another snake stole you (and ${e.n - 1} others)!`); }
       else if (e.thief === me0.sid) { sfx('gain'); toast(`😈 Your snake stole ${e.n} people!`); }
-      else if (e.victim === me0.sid) { shake.a = 8; sfx('lost'); toast(`😱 Your snake lost ${e.n} people to a thief!`); }
+      else if (e.victim === me0.sid) { shake.a = 16; sfx('crash'); sfx('lost'); knockFx(e.hx, e.hy); toast(`😱 Your snake lost ${e.n} people to a thief!`); }
+      if (e.victim !== me0.sid) knockFx(e.hx, e.hy, true);
     } else if (e.k === 'clash') {
       burst(e.x, e.y, 34, ['#fb923c', '#ffc93c', '#fff'], { speed: 380, life: 700, size: 5 });
       if (e.victim === myPid) { shake.a = 14; sfx('crash'); toast('🐍 Head-on crash! A bigger snake captured you.'); }
@@ -294,6 +295,23 @@
       parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life, max: life, size: rand(.6, 1.2) * size, color: pick(colors), grav, drag, rot: rand(0, TAU), vr: rand(-8, 8), sq: Math.random() < .5 });
     }
     if (parts.length > 1200) parts.splice(0, parts.length - 1200);
+  }
+  // Knockback: a shockwave ring plus sparks where the robbed head got shoved
+  const rings = [];
+  function knockFx(x, y, quiet) {
+    if (x == null) return;
+    rings.push({ x, y, at: now, quiet });
+    burst(x, y, quiet ? 12 : 24, ['#ffffff', '#ff5f7e', '#ffc93c'], { speed: quiet ? 260 : 380, life: 500, size: 4 });
+  }
+  function drawRings() {
+    for (let i = rings.length - 1; i >= 0; i--) {
+      const r = rings[i], t = (now - r.at) / 450;
+      if (t >= 1) { rings.splice(i, 1); continue; }
+      ctx.globalAlpha = (1 - t) * (r.quiet ? .45 : .85);
+      ctx.beginPath(); ctx.arc(r.x, r.y, 20 + t * (r.quiet ? 50 : 90), 0, TAU);
+      ctx.lineWidth = (1 - t) * 6 + 1; ctx.strokeStyle = '#fff'; ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
   }
   const confetti = (x, y, n) => burst(x, y, n, ['#ffc93c', '#ff5fa2', '#7dd3fc', '#a78bfa', '#34d399', '#fff'], { speed: 360, life: 1200, size: 6, grav: 260, drag: .95 });
   function stepParts(dt) {
@@ -736,6 +754,7 @@
       }
     }
     for (const s of view.snakes) { const h = s.members[0]; if (inView(h.x, h.y, 120)) drawHead(s, h); }
+    drawRings();
 
     for (const p of parts) {
       ctx.globalAlpha = Math.min(1, p.life / p.max * 1.4);
