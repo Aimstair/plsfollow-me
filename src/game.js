@@ -146,12 +146,18 @@ class Game {
         if (this.now < s.grace) continue;
         const m = s.members, h = m[0];
         if (Math.hypot(h.x - t.x, h.y - t.y) < CFG.TROLL_HEAD_HIT) {
+          t.coolUntil = this.now + CFG.TROLL_COOL_MS;
+          if (m.length === 1) {
+            // A head with nobody behind it has nothing to protect it: the troll knocks them out
+            this.event({ k: 'out', sid: s.id, pid: h.pid, x: Math.round(h.x), y: Math.round(h.y) });
+            this.eliminate(h, 'troll');
+            break;
+          }
           // Head bump: the leader's turn gets shorter, so the race comes sooner
           s.leaderSince -= CFG.TROLL_TIME_COST_MS;
           const r = s.race;
           if (!r.warned) r.goAt = Math.max(r.goAt - CFG.TROLL_TIME_COST_MS, this.now + CFG.GO_WARN_MS + 200);
           s.grace = this.now + 600;
-          t.coolUntil = this.now + CFG.TROLL_COOL_MS;
           this.event({ k: 'troll', sid: s.id, head: h.pid, ms: CFG.TROLL_TIME_COST_MS, x: Math.round(h.x), y: Math.round(h.y) });
           break;
         }
@@ -328,6 +334,25 @@ class Game {
     return c;
   }
 
+  // Knocked out of the game: back to the main screen, free to join again on the same connection
+  eliminate(p, why) {
+    const c = p.client;
+    this.removePlayer(p);
+    this.broadcastJson({ t: 'bye', pid: p.pid });
+    if (c) { c.player = null; p.client = null; this.send(c, { t: 'out', why }); }
+  }
+
+  // Somewhere away from the trolls, for a player who starts a brand-new snake
+  safeSpot() {
+    let best = null;
+    for (let i = 0; i < 12; i++) {
+      const a = rand(0, TAU), r = Math.sqrt(Math.random()) * this.arenaR * 0.6, x = Math.cos(a) * r, y = Math.sin(a) * r;
+      const d = Math.min(Infinity, ...this.trolls.map(t => Math.hypot(t.x - x, t.y - y)));
+      if (!best || d > best.d) best = { x, y, d };
+    }
+    return best;
+  }
+
   disconnect(c) {
     this.clients.delete(c);
     const p = c.player; if (!p) return;
@@ -382,7 +407,7 @@ class Game {
     // New people join the tail of the biggest snake. Nobody here yet: you start your own and lead it.
     const s = this.biggest();
     if (s) { const t = s.members[s.members.length - 1]; p.x = t.x + rand(-2, 2); p.y = t.y + rand(-2, 2); s.members.push(p); }
-    else this.spawnLine([p], rand(-200, 200), rand(-200, 200), rand(0, TAU));
+    else { const at = this.safeSpot(); this.spawnLine([p], at.x, at.y, Math.atan2(-at.y, -at.x)); }
     p.lastSteer = this.now; // a fresh head keeps going straight until the first steering message
     this.send(c, { t: 'you', pid: p.pid });
     this.broadcastJson({ t: 'prof', l: [this.profileRow(p)] });

@@ -216,7 +216,11 @@ input, select { font: inherit; font-size: 16px; color: var(--ink); background: r
 </style>
 <style>
 [hidden] { display: none !important; }
-#intro .legend { font-size: 13.5px; color: var(--muted); max-width: 440px; margin: 0 auto; }
+#donate { position: absolute; top: calc(16px + env(safe-area-inset-top, 0px)); right: 16px; z-index: 1; display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 999px; font: 800 14px var(--body); color: var(--ink); text-decoration: none; border: 1px solid rgba(255, 95, 162, .45); box-shadow: 0 0 0 0 rgba(255, 95, 162, .5), 0 8px 24px rgba(0, 0, 0, .35); transition: transform .15s, border-color .15s; animation: donatePulse 2.8s ease-in-out infinite; }
+#donate:hover, #donate:focus-visible { transform: translateY(-1px); border-color: var(--you); }
+@keyframes donatePulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255, 95, 162, .35), 0 8px 24px rgba(0, 0, 0, .35); } 50% { box-shadow: 0 0 0 8px rgba(255, 95, 162, 0), 0 8px 24px rgba(0, 0, 0, .35); } }
+@media (max-width: 640px) { #donate { top: calc(12px + env(safe-area-inset-top, 0px)); right: 12px; padding: 8px 12px; font-size: 13px; } }
+@media (prefers-reduced-motion: reduce) { #donate { animation: none; } }
 #joinErr { margin: 0; color: #ff8fa3; font-weight: 700; font-size: 14px; }
 #status.offline { background: rgba(120, 30, 50, .85); }
 </style>
@@ -284,11 +288,11 @@ input, select { font: inherit; font-size: 16px; color: var(--ink); background: r
 <canvas class="hud glass" id="mini" width="280" height="280" aria-label="Minimap"></canvas>
 
 <div id="intro">
+  <a id="donate" class="glass" href="#" target="_blank" rel="noopener" hidden><span aria-hidden="true">💖</span> Support the snake</a>
   <div class="wrap">
     <span class="beads" aria-hidden="true"><i style="--c:#ff5fa2;--d:0"></i><i style="--c:#ffc93c;--d:1"></i><i style="--c:#34d399;--d:2"></i><i style="--c:#7dd3fc;--d:3"></i><i style="--c:#a78bfa;--d:4"></i><i style="--c:#fb923c;--d:5"></i><i style="--c:#f472b6;--d:6"></i></span>
     <h1>pls follow <span>me</span></h1>
     <p>One giant snake made of strangers. Each head leads for 30 seconds. In the last 10, everyone races to be next, and while you lead, the whole snake sees your profile.</p>
-    <p class="legend"><b>⚡</b> boosts make you faster · <b>👹 Trolls</b> roam the map: bump one with your head and lose 5 seconds of your turn, let one hit your body and your snake breaks.</p>
     <div class="live"><span class="live-dot"></span><span><b id="introN">0</b> strangers are in the snake right now</span></div>
     <form id="joinForm" class="glass">
       <label for="handle">Your handle (optional)</label>

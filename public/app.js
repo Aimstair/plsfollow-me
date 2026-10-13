@@ -3,6 +3,8 @@
   // ---------- Constants ----------
   const TAU = Math.PI * 2, R = 10.5, HEAD_R = 21, TICK_MS = 50, MAX_EXTRAP_MS = 120;
   let LEAD_MS = 30000, RACE_MS = 10000, BOOT = '';
+  // Donation link for the main-screen button. Leave empty to hide the button.
+  const DONATE_URL = '';
   const PLAT = { ig: 'Instagram', tt: 'TikTok', x: 'X', yt: 'YouTube', tw: 'Twitch' };
   const PLAT_DOT = { ig: '#dd2a7b', tt: '#25f4ee', x: '#e7e9ea', yt: '#ff0033', tw: '#9146ff' };
   const PROFILE_URL = {
@@ -183,6 +185,7 @@
       case 'prof': m.l.forEach(setProfile); break;
       case 'bye': profiles.delete(m.pid); break;
       case 'you': myPid = m.pid; onJoined(); break;
+      case 'out': knockedOut(m.why); break;
       case 'err': joinInfo = null; $('intro').hidden = false; $('bottom').hidden = true; $('joinErr').textContent = m.msg; $('joinErr').hidden = false; $('joinBtn').disabled = false; break;
       case 'sync': {
         const t = performance.now(), rtt = t - m.c;
@@ -234,6 +237,8 @@
         shake.a = e.head === myPid ? 12 : 6;
         toast(e.head === myPid ? `👹 A troll bumped you: −${e.ms / 1000}s of your turn!` : `👹 A troll bumped the head: −${e.ms / 1000}s. The race comes sooner!`);
       }
+    } else if (e.k === 'out') {
+      burst(e.x, e.y, 46, ['#a855f7', '#f0abfc', '#ff5f7e', '#fff'], { speed: 420, life: 900, size: 6 });
     } else if (e.k === 'break') {
       burst(e.x, e.y, 34, ['#a855f7', '#f0abfc', '#fff'], { speed: 360, life: 750, size: 5 });
       if (e.sid === me0.sid) { shake.a = 12; toast(me0.idx >= e.k2 ? "👹 A troll broke the snake. You're in a new snake now!" : `👹 A troll broke ${e.n} people off your snake!`); }
@@ -785,6 +790,16 @@
     joinInfo = { handle, platform: $('platform').value, img: file ? await shrinkPhoto(file) : null };
     send({ t: 'join', ...joinInfo });
   });
+  // A troll caught a head with no tail: back to the main screen, form still filled in for a quick rejoin
+  function knockedOut() {
+    if (spot) { stats.opens += spot.opens; spot = null; }
+    myPid = 0; me = mine = null; joinInfo = null; closeRace();
+    shake.a = 16;
+    $('bottom').hidden = true; $('peek').hidden = true; $('shareModal').hidden = true;
+    $('intro').hidden = false; $('joinBtn').disabled = false;
+    $('joinErr').textContent = '👹 A troll got you! Without a tail to protect you, one bump knocks you out. Jump back in?';
+    $('joinErr').hidden = false;
+  }
   let greetPending = false;
   function onJoined() {
     $('intro').hidden = true; $('bottom').hidden = false; $('joinBtn').disabled = false;
@@ -1008,6 +1023,7 @@
     hud();
     requestAnimationFrame(frame);
   }
+  if (DONATE_URL) { $('donate').href = DONATE_URL; $('donate').hidden = false; }
   connect();
   requestAnimationFrame(frame);
 })();
