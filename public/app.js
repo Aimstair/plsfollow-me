@@ -406,7 +406,8 @@
   function follow(pid) {
     const h = handleOf(pid); if (!h) return;
     send({ t: 'open', pid });
-    window.open(PROFILE_URL[platOf(pid)](encodeURIComponent(h)), '_blank', 'noopener');
+    const url = (PROFILE_URL[platOf(pid)] || PROFILE_URL.ig)(encodeURIComponent(h));
+    window.open(url, '_blank', 'noopener');
   }
   $('peekFollow').addEventListener('click', () => follow(peekFor));
   $('spotFollow').addEventListener('click', e => { e.stopPropagation(); if (mine) follow(mine.members[0].pid); });

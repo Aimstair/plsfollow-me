@@ -26,6 +26,21 @@ const CSP = [
 
 const game = new Game();
 
+// The page is served with versioned script URLs (app.js?v=<hash>), so every deploy reaches every
+// browser immediately instead of some people running a cached older script.
+const crypto = require('crypto');
+const INDEX = (() => {
+  const html = fs.readFileSync(path.join(PUB, 'index.html'), 'utf8');
+  return html.replace(/src="\/(app|audio)\.js"/g, (m, name) => {
+    const v = crypto.createHash('sha1').update(fs.readFileSync(path.join(PUB, `${name}.js`))).digest('hex').slice(0, 10);
+    return `src="/${name}.js?v=${v}"`;
+  });
+})();
+function serveIndex(req, res) {
+  res.writeHead(200, { 'Content-Type': TYPES['.html'], 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'strict-origin-when-cross-origin', 'Content-Security-Policy': CSP });
+  res.end(req.method === 'HEAD' ? undefined : INDEX);
+}
+
 function serveStatic(req, res, pathname) {
   if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); res.end(); return; }
   let rel;
@@ -66,7 +81,7 @@ const server = http.createServer((req, res) => {
     return;
   }
   // Invite links like /@kirk.plays load the game with that friend prefilled
-  if (/^\/@[A-Za-z0-9._-]{1,30}$/.test(pathname)) { serveStatic(req, res, '/'); return; }
+  if (pathname === '/' || pathname === '/index.html' || /^\/@[A-Za-z0-9._-]{1,30}$/.test(pathname)) { serveIndex(req, res); return; }
   serveStatic(req, res, pathname);
 });
 
