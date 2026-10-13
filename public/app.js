@@ -15,6 +15,7 @@
   const cv = document.getElementById('game'), ctx = cv.getContext('2d');
   const mini = document.getElementById('mini'), mctx = mini.getContext('2d');
   const $ = id => document.getElementById(id);
+  const sfx = name => window.PFAudio && PFAudio.play(name);
   let W = 0, H = 0, DPR = 1;
   function resize() { DPR = Math.min(2, window.devicePixelRatio || 1); W = innerWidth; H = innerHeight; cv.width = W * DPR; cv.height = H * DPR; }
   resize(); addEventListener('resize', resize);
@@ -201,7 +202,7 @@
       case 'tapr': onTapResult(m); break;
       case 'opened':
         if (spot) {
-          spot.opens += m.n;
+          spot.opens += m.n; sfx('opened');
           toast(`🔔 Someone opened your ${PLAT[platOf(myPid)]}`);
           if (me) burst(me.x, me.y - 30, 10, ['#ffc93c', '#fff'], { speed: 160, life: 600, size: 3 });
         }
@@ -217,35 +218,36 @@
     const me0 = latestPlace();
     if (e.k === 'boost') {
       burst(e.x, e.y, 26, ['#7dd3fc', '#e0f7ff', '#38bdf8'], { speed: 300, life: 600, size: 4 });
-      if (e.sid === me0.sid && me0.idx === 0) { toast('⚡ Speed boost! Go steal someone.', true); shake.a = 6; }
+      if (e.sid === me0.sid && me0.idx === 0) { toast('⚡ Speed boost! Go steal someone.', true); shake.a = 6; sfx('boost'); }
     } else if (e.k === 'bite') {
       burst(e.x, e.y, 30, ['#ffffff', '#cfe8ff', '#ffc93c'], { speed: 340, life: 700, size: 5 });
-      if (e.sid === me0.sid) { shake.a = 12; toast(me0.idx >= e.k2 ? '💥 The snake bit itself. You are in a new snake!' : `💥 The snake bit itself and lost ${e.n} people!`); }
+      if (e.sid === me0.sid) { shake.a = 12; sfx('crash'); toast(me0.idx >= e.k2 ? '💥 The snake bit itself. You are in a new snake!' : `💥 The snake bit itself and lost ${e.n} people!`); }
     } else if (e.k === 'steal') {
       burst(e.x, e.y, 30, ['#ff5fa2', '#ffc93c', '#fff'], { speed: 320, life: 750, size: 5 });
-      if (e.victim === me0.sid && me0.idx >= e.k2) { shake.a = 12; toast(`🫳 Another snake stole you (and ${e.n - 1} others)!`); }
-      else if (e.thief === me0.sid) toast(`😈 Your snake stole ${e.n} people!`);
-      else if (e.victim === me0.sid) { shake.a = 8; toast(`😱 Your snake lost ${e.n} people to a thief!`); }
+      if (e.victim === me0.sid && me0.idx >= e.k2) { shake.a = 12; sfx('lost'); toast(`🫳 Another snake stole you (and ${e.n - 1} others)!`); }
+      else if (e.thief === me0.sid) { sfx('gain'); toast(`😈 Your snake stole ${e.n} people!`); }
+      else if (e.victim === me0.sid) { shake.a = 8; sfx('lost'); toast(`😱 Your snake lost ${e.n} people to a thief!`); }
     } else if (e.k === 'clash') {
       burst(e.x, e.y, 34, ['#fb923c', '#ffc93c', '#fff'], { speed: 380, life: 700, size: 5 });
-      if (e.victim === myPid) { shake.a = 14; toast('🐍 Head-on crash! A bigger snake captured you.'); }
-      else if (e.win === me0.sid) toast(`🥊 Head-on crash! Your snake captured ${name(e.victim)}`);
-      else if (e.lose === me0.sid) { shake.a = 10; toast(`🥊 Your head ${name(e.victim)} got captured by a bigger snake!`); }
+      if (e.victim === myPid) { shake.a = 14; sfx('crash'); toast('🐍 Head-on crash! A bigger snake captured you.'); }
+      else if (e.win === me0.sid) { sfx('gain'); toast(`🥊 Head-on crash! Your snake captured ${name(e.victim)}`); }
+      else if (e.lose === me0.sid) { shake.a = 10; sfx('crash'); toast(`🥊 Your head ${name(e.victim)} got captured by a bigger snake!`); }
     } else if (e.k === 'troll') {
       burst(e.x, e.y, 28, ['#a855f7', '#f0abfc', '#ff5f7e'], { speed: 300, life: 650, size: 5 });
       if (e.sid === me0.sid) {
-        shake.a = e.head === myPid ? 12 : 6;
+        shake.a = e.head === myPid ? 12 : 6; sfx('troll');
         toast(e.head === myPid ? `👹 A troll bumped you: −${e.ms / 1000}s of your turn!` : `👹 A troll bumped the head: −${e.ms / 1000}s. The race comes sooner!`);
       }
     } else if (e.k === 'out') {
       burst(e.x, e.y, 46, ['#a855f7', '#f0abfc', '#ff5f7e', '#fff'], { speed: 420, life: 900, size: 6 });
     } else if (e.k === 'break') {
       burst(e.x, e.y, 34, ['#a855f7', '#f0abfc', '#fff'], { speed: 360, life: 750, size: 5 });
-      if (e.sid === me0.sid) { shake.a = 12; toast(me0.idx >= e.k2 ? "👹 A troll broke the snake. You're in a new snake now!" : `👹 A troll broke ${e.n} people off your snake!`); }
+      if (e.sid === me0.sid) { shake.a = 12; sfx('troll'); sfx('crash'); toast(me0.idx >= e.k2 ? "👹 A troll broke the snake. You're in a new snake now!" : `👹 A troll broke ${e.n} people off your snake!`); }
     } else if (e.k === 'turn') {
       const h = headPos(e.sid);
       if (h && e.head !== myPid) confetti(h.x, h.y, 22);
       if (e.sid !== me0.sid) return;
+      if (e.head !== myPid) sfx('turn');
       if (e.prev === myPid && e.head !== myPid) toast(e.why === 'afk' ? 'You went quiet, so the next person took over.' : 'Your 30 seconds are up. Back to the tail!');
       if (e.ms && e.head !== myPid) toast(`⚔️ ${name(e.head)} won the race in ${e.ms} ms and is the new head`);
     }
@@ -310,7 +312,7 @@
     $('duelHint').textContent = 'Everyone in the snake is racing right now. Tap the moment it turns green. The fastest tap becomes the next head.';
     $('duelResult').textContent = '';
     const pad = $('pad'); pad.className = ''; pad.textContent = 'Get ready…'; pad.disabled = false;
-    $('duel').hidden = false; pad.focus();
+    $('duel').hidden = false; pad.focus(); sfx('ready');
     if (goInfo && keyOf(goInfo.sid, goInfo.turn) === key) scheduleGo();
   }
   function onGo(m) { goInfo = m; if (race && race.key === keyOf(m.sid, m.turn) && race.state === 'wait') scheduleGo(); }
@@ -320,7 +322,7 @@
     padTimer = setTimeout(() => {
       if (!race || race.state !== 'wait') return;
       race.state = 'go';
-      const pad = $('pad'); pad.className = 'go'; pad.textContent = 'TAP!';
+      const pad = $('pad'); pad.className = 'go'; pad.textContent = 'TAP!'; sfx('go');
       race.shownAt = performance.now();
       padTimer = setTimeout(() => finishRace(-2), Math.max(500, (mine ? mine.left : 3000) - 300));
     }, Math.max(0, wait));
@@ -335,6 +337,7 @@
     const r = race; r.state = 'done'; raced.add(r.key);
     const pad = $('pad'); pad.className = 'done'; pad.disabled = true;
     pad.textContent = ms === -1 ? 'Too early!' : ms === -2 ? 'Too slow!' : `${ms} ms`;
+    sfx(ms < 0 ? 'miss' : 'tap');
     if (ms !== -2) send({ t: 'tap', sid: r.sid, turn: r.turn, ms });
     $('duelResult').textContent = ms === -1 ? 'You tapped before green. You can race again next turn.' : ms === -2 ? 'No tap this time. You can race again next turn.' : 'Checking…';
     if (ms < 0) doneTimer = setTimeout(closeRace, 1600);
@@ -343,6 +346,7 @@
     if (!race) return;
     if (m.ok) {
       stats.best = stats.best ? Math.min(stats.best, m.ms) : m.ms;
+      if (m.rank === 1) sfx('win');
       $('duelResult').textContent = m.rank === 1 ? "You're in first so far! The winner is announced when the turn ends 👑" : `You're #${m.rank} so far.`;
     } else {
       $('duelResult').textContent = m.why === 'early' ? 'Too early. You can race again next turn.' : m.why === 'invalid' ? "That tap didn't count (connection hiccup). Try next turn." : 'The turn ended before your tap arrived.';
@@ -680,7 +684,7 @@
       spot = { opens: 0, shown: 0 };
       stats.led++; stats.biggestLed = Math.max(stats.biggestLed, mine.members.length);
       toast(mine.members.length > 1 ? '👑 You are the head for 30s. The whole snake sees your profile!' : '👑 You are the head. Grab people to grow your snake!', true);
-      confetti(me.x, me.y, 46); shake.a = 10;
+      confetti(me.x, me.y, 46); shake.a = 10; sfx('head');
     } else if (head && spot) {
       spot.shown = Math.max(spot.shown, mine.members.length - 1);
       stats.biggestLed = Math.max(stats.biggestLed, mine.members.length);
@@ -781,6 +785,7 @@
   }
   $('joinForm').addEventListener('submit', async e => {
     e.preventDefault();
+    if (window.PFAudio) PFAudio.unlock();
     $('joinErr').hidden = true; $('joinBtn').disabled = true;
     const handle = $('handle').value.trim().replace(/^@+/, '').replace(/\s+/g, '').slice(0, 30);
     if (handle && !/^[A-Za-z0-9._-]+$/.test(handle)) {
@@ -794,7 +799,7 @@
   function knockedOut() {
     if (spot) { stats.opens += spot.opens; spot = null; }
     myPid = 0; me = mine = null; joinInfo = null; closeRace();
-    shake.a = 16;
+    shake.a = 16; sfx('out');
     $('bottom').hidden = true; $('peek').hidden = true; $('shareModal').hidden = true;
     $('intro').hidden = false; $('joinBtn').disabled = false;
     $('joinErr').textContent = '👹 A troll got you! Without a tail to protect you, one bump knocks you out. Jump back in?';
@@ -804,6 +809,7 @@
   function onJoined() {
     $('intro').hidden = true; $('bottom').hidden = false; $('joinBtn').disabled = false;
     greetPending = true; // greeted on the first frame that shows us in a snake
+    sfx('join');
   }
   function greet() {
     if (!greetPending || !me) return;
@@ -1023,6 +1029,18 @@
     hud();
     requestAnimationFrame(frame);
   }
+  // Music and sound toggles (remembered per browser)
+  function syncAudioButtons() {
+    if (!window.PFAudio) { $('audioCtl').hidden = true; return; }
+    for (const [id, on, label] of [['musicBtn', PFAudio.music, 'Music'], ['sfxBtn', PFAudio.sfx, 'Sound effects']]) {
+      const b = $(id); b.setAttribute('aria-pressed', on); b.title = `${label}: ${on ? 'on' : 'off'}`; b.setAttribute('aria-label', b.title);
+    }
+  }
+  $('musicBtn').addEventListener('click', () => { PFAudio.setMusic(!PFAudio.music); PFAudio.unlock(); syncAudioButtons(); });
+  $('sfxBtn').addEventListener('click', () => { PFAudio.setSfx(!PFAudio.sfx); PFAudio.unlock(); syncAudioButtons(); sfx('click'); });
+  // Any first tap anywhere also wakes the audio (browsers block sound until then)
+  addEventListener('pointerdown', () => window.PFAudio && PFAudio.unlock(), { once: true });
+  syncAudioButtons();
   if (DONATE_URL) { $('donate').href = DONATE_URL; $('donate').hidden = false; }
   connect();
   requestAnimationFrame(frame);
