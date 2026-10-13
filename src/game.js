@@ -85,11 +85,9 @@ class Game {
     s.path = null; // new head: the trail starts again from the body as it is now
     // Leading real people counts toward the hall of fame
     if (h.handle && !h.bot && s.members.length > 1) this.fame.led(h.handle, h.platform, s.members.length);
-    // The tap race runs for the whole turn. Everyone in the snake right now is in it; anyone who
-    // arrives later (joined, stolen, captured) waits for the next leader.
-    s.race = { entries: new Map(), eligible: new Set(), dirty: true };
-    const msg = JSON.stringify({ t: 'raceOpen', sid: s.id, turn: s.turn });
-    for (let i = 1; i < s.members.length; i++) { const p = s.members[i]; s.race.eligible.add(p.pid); if (p.client) this.sendRaw(p.client, msg); }
+    // The tap race runs for the whole turn: everyone behind the head can tap, including people who
+    // arrive mid-turn (they start from zero). Counts reset with every new leader.
+    s.race = { entries: new Map(), dirty: true };
   }
 
   endTurn(s, why) {
@@ -256,6 +254,7 @@ class Game {
     if (this.bolts.length > wantBolts) this.bolts.length = wantBolts;
 
     for (const s of this.snakes.slice()) this.leadership(s);
+    for (const s of this.snakes) this.purgeRace(s);
     for (const s of this.snakes) this.move(s, dt);
     this.moveTrolls(dt);
     this.collide();
@@ -274,12 +273,14 @@ class Game {
     if (s.soloSince) { s.soloSince = 0; s.bumpedBy = 0; } // got a tail: back to a normal turn
     if (s.members.length > 1 && this.now - h.lastInput > CFG.AFK_MS && s.members.some(p => p !== h && this.active(p))) { this.endTurn(s, 'afk'); return; }
     if (this.now - s.leaderSince >= CFG.LEAD_MS) { this.endTurn(s, 'time'); return; }
+  }
+
+  // Anyone who left a snake (stolen, captured, absorbed) loses their taps there; coming back starts at zero
+  purgeRace(s) {
     const r = s.race;
-    // Anyone who left this snake mid-race (stolen, captured, absorbed) loses their taps for good
-    if (r.eligible.size) {
-      const here = new Set(s.members.map(p => p.pid));
-      for (const pid of r.eligible) if (!here.has(pid)) { r.eligible.delete(pid); if (r.entries.delete(pid)) r.dirty = true; }
-    }
+    if (!r || !r.entries.size) return;
+    const here = new Set(s.members.map(p => p.pid));
+    for (const pid of r.entries.keys()) if (!here.has(pid)) { r.entries.delete(pid); r.dirty = true; }
   }
 
   // Trail following: the snake remembers where its head has been, and every segment rides that
@@ -426,7 +427,6 @@ class Game {
     const s = this.snakeOf(p);
     if (!s || s.members[0] === p || s.id !== m.sid || s.turn !== m.turn) return;
     const r = s.race;
-    if (!r.eligible.has(p.pid)) return this.send(c, { t: 'tapr', ok: false, why: 'late' });
     const n = Math.floor(Number(m.n));
     if (!Number.isFinite(n) || n < 1) return;
     let e = r.entries.get(p.pid);

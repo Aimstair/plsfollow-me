@@ -219,7 +219,6 @@
         break;
       }
       case 'ev': m.l.forEach(onEvent); break;
-      case 'raceOpen': raceOk.add(keyOf(m.sid, m.turn)); break;
       case 'race': onRaceBoard(m); break;
       case 'tapr': onTapResult(m); break;
       case 'opened':
@@ -359,7 +358,6 @@
   // In the leader's last 10 seconds, everyone who was in the snake when it opened taps as fast as they
   // can. Most taps when the timer runs out leads next. Taps go to the server in small batches.
   let race = null, raceTop = null, tapTimer = 0;
-  const raceOk = new Set(); // races we're in (we were in the snake when it opened)
   const hiddenRace = new Set(); // races whose pop-up we closed (still racing via the race bar)
   let myEntry = null; // we tapped in the current turn's race (for the "you lost" sound)
   const keyOf = (sid, turn) => `${sid}:${turn}`;
@@ -414,9 +412,7 @@
     race.wasFirst = amFirst;
     $('duelResult').textContent = amFirst ? `👑 You're in first with ${first[1]} taps!` : first ? `You: ${mineN} · 1st: ${name(first[0])} with ${first[1]}` : 'Go go go!';
   }
-  function onTapResult(m) {
-    if (m.why === 'late') $('duelResult').textContent = "This race started before you arrived. You're in the next one!";
-  }
+  function onTapResult() {}
   function closeRace() { flushTaps(); clearInterval(tapTimer); $('duel').hidden = true; race = null; }
 
   // ---------- Peek + follow ----------
@@ -848,7 +844,7 @@
   function raceCheck() {
     if (race && (!mine || myIdx === 0 || keyOf(mine.id, mine.turn) !== race.key || !raceOn(mine))) closeRace();
     const k = mine && keyOf(mine.id, mine.turn);
-    if (me && myIdx > 0 && raceOn(mine) && mine.left > 300 && !race && raceOk.has(k) && !hiddenRace.has(k)) openRace(mine);
+    if (me && myIdx > 0 && raceOn(mine) && mine.left > 300 && !race && !hiddenRace.has(k)) openRace(mine);
     if (race) $('duelTime').textContent = fmt(mine.left);
   }
 
@@ -884,9 +880,7 @@
         st.classList.toggle('urgent', mine.members.length === 1 && !alone && left <= RACE_MS);
       } else {
         st.className = 'glass';
-        const inRace = raceOk.has(key);
         st.textContent = ranked[0] && ranked[0][0] === myPid ? `🔥 You're winning the tap race. You lead in ${fmt(left)}`
-          : !inRace ? `You're #${myIdx + 1} of ${mine.members.length} · you're in the next tap race (${fmt(left)})`
           : `You're #${myIdx + 1} of ${mine.members.length} · tap race · new leader in ${fmt(left)}`;
       }
 
@@ -923,7 +917,7 @@
       } else {
         const li = document.createElement('li'); li.className = 'empty';
         li.textContent = mine.members.length === 1 ? 'Hit another snake’s body to steal its people. Head bumps with other lone heads cost you both 5s.'
-          : myIdx === 0 ? 'Your followers are tapping for your spot…' : !raceOk.has(key) ? "Race in progress. You're in the next one!" : 'Tap anywhere! Most taps when the timer ends leads next.';
+          : myIdx === 0 ? 'Your followers are tapping for your spot…' : 'Tap anywhere! Most taps when the timer ends leads next.';
         list.append(li);
       }
     } else if (online) st.hidden = true;
@@ -932,12 +926,15 @@
     $('introNote').textContent = humans ? 'Live right now. Jump in!' : "Nobody's here yet. Join now and you lead first.";
   }
 
+  let lastToast = '', lastToastAt = 0;
   function toast(msg, gold) {
+    if (msg === lastToast && now - lastToastAt < 2500) return; // same notice twice in a row: show once
+    lastToast = msg; lastToastAt = now;
     const el = document.createElement('div');
     el.className = 'toast glass' + (gold ? ' gold' : ''); el.textContent = msg;
     $('toasts').prepend(el);
-    setTimeout(() => el.remove(), 3200);
-    while ($('toasts').children.length > 3) $('toasts').lastChild.remove();
+    setTimeout(() => el.remove(), 2550);
+    while ($('toasts').children.length > 2) $('toasts').lastChild.remove();
   }
 
   // ---------- Hall of fame ----------
@@ -1072,12 +1069,11 @@
   function greet() {
     if (!greetPending || !me) return;
     greetPending = false;
-    if (myIdx > 0) toast(`You joined at the tail. You're #${myIdx + 1}. Race to be the next head!`);
+    if (myIdx > 0) toast(`You joined at the tail. You're #${myIdx + 1}. Tap to be the next head!`);
   }
   $('race').addEventListener('click', e => {
     if (e.target.closest('#share')) return;
     if (!mine || myIdx === 0 || !raceOn(mine)) return;
-    if (!raceOk.has(keyOf(mine.id, mine.turn))) { toast("This race started before you arrived. You're in the next one!"); return; }
     openRace(mine);
   });
 
