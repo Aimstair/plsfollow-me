@@ -266,6 +266,9 @@ select option { color: #0b1220; background: #fff; }
 /* Wide screens: the board sits beside the join form instead of under it */
 @media (min-width: 1180px) { #fame { position: fixed; right: 28px; top: 50%; transform: translateY(-50%); width: 320px; max-height: calc(100vh - 140px); overflow-y: auto; } }
 #joinErr { margin: 0; color: #ff8fa3; font-weight: 700; font-size: 14px; }
+#status.lead.urgent { background: linear-gradient(180deg, #ff8a9e, #f43f5e); color: #2a0610; animation: urgent .6s ease-in-out infinite alternate; }
+@keyframes urgent { to { transform: scale(1.04); box-shadow: 0 8px 30px rgba(244,63,94,.55); } }
+@media (prefers-reduced-motion: reduce) { #status.lead.urgent { animation: none; } }
 #status.offline { background: rgba(120, 30, 50, .85); }
 </style>
 </head>

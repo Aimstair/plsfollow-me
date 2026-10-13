@@ -1,7 +1,7 @@
 (() => {
   'use strict';
   // ---------- Constants ----------
-  const TAU = Math.PI * 2, R = 13.5, HEAD_R = 21, TICK_MS = 50, MAX_EXTRAP_MS = 120;
+  const TAU = Math.PI * 2, R = 17, HEAD_R = 21, TICK_MS = 50, MAX_EXTRAP_MS = 120;
   let LEAD_MS = 30000, RACE_MS = 10000, BOOT = '';
   // Donation link for the main-screen button. Leave empty to hide the button.
   const DONATE_URL = 'https://buymeacoffee.com/aimstair';
@@ -123,7 +123,7 @@
       const sa = a.byId.get(s.id);
       return {
         id: s.id, turn: s.turn, boost: s.boost, angle: sa ? lerpAng(sa.angle, s.angle, k) : s.angle,
-        left: Math.max(0, s.left - (rst - b.st)),
+        left: Math.max(0, Math.min(LEAD_MS, s.left - (rst - b.st))),
         members: s.members.map(m => { const q = mix(a.pos.get(m.pid), m); q.pid = m.pid; return q; }),
       };
     });
@@ -240,6 +240,13 @@
         shake.a = e.head === myPid ? 12 : 6; sfx('troll');
         toast(e.head === myPid ? `👹 A troll bumped you: −${e.ms / 1000}s of your turn!` : `👹 A troll bumped the head: −${e.ms / 1000}s. The race comes sooner!`);
       }
+    } else if (e.k === 'bump') {
+      burst(e.x, e.y, 30, ['#ffc93c', '#ff5f7e', '#fff'], { speed: 340, life: 650, size: 5 });
+      if (e.a === myPid || e.b === myPid) { shake.a = 12; sfx('crash'); toast(`💥 Head bump with ${name(e.a === myPid ? e.b : e.a)}! −${e.ms / 1000}s for both of you`); }
+    } else if (e.k === 'absorb') {
+      burst(e.x, e.y, 26, ['#ff5fa2', '#ffc93c', '#fff'], { speed: 300, life: 700, size: 5 });
+      if (e.victim === myPid) { shake.a = 10; sfx('lose'); toast(`⏱ Out of time! ${name(e.by)} bumped you, so you're in their tail now.`); }
+      else if (e.by === myPid) { sfx('gain'); toast(`🐍 ${name(e.victim)} ran out of time and joined your tail!`, true); }
     } else if (e.k === 'out') {
       burst(e.x, e.y, 46, ['#a855f7', '#f0abfc', '#ff5f7e', '#fff'], { speed: 420, life: 900, size: 6 });
     } else if (e.k === 'break') {
@@ -684,10 +691,10 @@
       for (let i = L - 1; i >= 1; i--) {
         const p = m[i];
         if (!inView(p.x, p.y, 30)) continue;
-        const taper = i > L - 6 ? .6 + .4 * (L - 1 - i) / 5 : 1, r = R * taper;
+        const r = R; // every face the same size: 80% of the head
         // Every segment is that person's profile: their photo, or a colored initial placeholder
         if (p.pid === myPid) {
-          const pulse = 1 + Math.sin(now / 200) * .12, rr = r * 1.3;
+          const pulse = 1 + Math.sin(now / 200) * .12, rr = r * 1.08;
           ctx.globalAlpha = .7; ctx.drawImage(glow('255,95,162'), p.x - 40, p.y - 40, 80, 80); ctx.globalAlpha = 1;
           ctx.beginPath(); ctx.arc(p.x, p.y, rr + 2, 0, TAU); ctx.fillStyle = '#ff5fa2'; ctx.fill();
           ctx.drawImage(avatar(p.pid, 48), p.x - rr, p.y - rr, rr * 2, rr * 2);
@@ -820,7 +827,11 @@
       const left = mine.left, head = mine.members[0], live = raceLive(mine), key = keyOf(mine.id, mine.turn);
       if (myIdx === 0) {
         st.className = 'glass lead';
-        st.textContent = mine.members.length > 1 ? (live ? `👑 Your followers are racing for your spot · ${fmt(left)}` : `👑 You're the head · ${fmt(left)} · grab ⚡ to go faster`) : "👑 You're a snake of one. Steal some people!";
+        const alone = view.snakes.length < 2;
+        st.textContent = mine.members.length > 1 ? (live ? `👑 Your followers are racing for your spot · ${fmt(left)}` : `👑 You're the head · ${fmt(left)} · grab ⚡ to go faster`)
+          : alone ? "👑 You're the only one here. Your 30s timer starts when someone else joins."
+          : `⏱ Get a tail in ${fmt(left)} or it's game over! Hit a snake's body to steal people.`;
+        st.classList.toggle('urgent', mine.members.length === 1 && !alone && left <= RACE_MS);
       } else {
         st.className = 'glass';
         st.textContent = ranked[0] && ranked[0][0] === myPid ? `🔥 You're winning the race. You lead in ${fmt(left)}` : `You're #${myIdx + 1} of ${mine.members.length} · race ${live ? 'is LIVE' : 'starts in ' + fmt(left - RACE_MS)}`;
@@ -846,7 +857,8 @@
       $('spotOpensN').textContent = spot ? spot.opens : 0;
 
       $('race').classList.toggle('live', live);
-      $('raceCloses').textContent = live ? `🔴 Race LIVE · ${fmt(left)}` : `⚔️ Race starts in ${fmt(left - RACE_MS)}`;
+      const lone = mine.members.length === 1;
+      $('raceCloses').textContent = lone ? (view.snakes.length < 2 ? '⏸ Timer paused: nobody else here yet' : `⏱ ${fmt(left)} to get a tail`) : live ? `🔴 Race LIVE · ${fmt(left)}` : `⚔️ Race starts in ${fmt(left - RACE_MS)}`;
       const list = $('raceList'); list.textContent = '';
       if (live && ranked.length) for (let i = 0; i < 3; i++) {
         const e = ranked[i], li = document.createElement('li');
@@ -857,7 +869,8 @@
         li.append(top, nm, ms); list.append(li);
       } else {
         const li = document.createElement('li'); li.className = 'empty';
-        li.textContent = live ? (myIdx === 0 ? 'Your followers are racing…' : raced.has(key) ? 'Waiting for times…' : 'Tap here to race!') : mine.members.length > 1 ? 'Everyone races in the last 10 seconds. Fastest tap leads next.' : 'Bump into another snake to steal its people.';
+        li.textContent = mine.members.length === 1 ? 'Hit another snake’s body to steal its people. Head bumps with other lone heads cost you both 5s.'
+          : live ? (myIdx === 0 ? 'Your followers are racing…' : raced.has(key) ? 'Waiting for times…' : 'Tap here to race!') : 'Everyone races in the last 10 seconds. Fastest tap leads next.';
         list.append(li);
       }
     } else if (online) st.hidden = true;
@@ -959,13 +972,15 @@
     send({ t: 'join', ...joinInfo });
   });
   // A troll caught a head with no tail: back to the main screen, form still filled in for a quick rejoin
-  function knockedOut() {
+  function knockedOut(why) {
     if (spot) { stats.opens += spot.opens; spot = null; }
     myPid = 0; me = mine = null; joinInfo = null; closeRace();
     shake.a = 16; sfx('out'); if (window.PFAudio) PFAudio.duck(3); closeChat();
     $('bottom').hidden = true; $('peek').hidden = true; $('shareModal').hidden = true;
     $('intro').hidden = false; $('joinBtn').disabled = false;
-    $('joinErr').textContent = '👹 A troll got you! Without a tail to protect you, one bump knocks you out. Jump back in?';
+    $('joinErr').textContent = why === 'time'
+      ? "⏱ Time's up! You didn't get a tail in 30 seconds. Jump back in?"
+      : '👹 A troll got you! Without a tail to protect you, one bump knocks you out. Jump back in?';
     $('joinErr').hidden = false;
   }
   let greetPending = false;

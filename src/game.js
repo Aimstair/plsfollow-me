@@ -7,15 +7,16 @@ const CFG = {
   TICK_MS: 50,
   LEAD_MS: 30000, // every head leads for exactly this long
   RACE_MS: 10000, // the last part of a turn is the race for next head
-  SPEED: 190, TURN: 4.6, SPACING: 21, HIT: 22, SELF_SKIP: 10,
+  SPEED: 190, TURN: 4.6, SPACING: 34, HIT: 30, SELF_SKIP: 8, // tails are ~80% of the head's size
+  SOLO_MS: 30000, BUMP_COST_MS: 5000, // a head with no tail has 30s to get one; head bumps between two of them cost 5s each
   GRACE_MS: 1500, STEAL_GRACE_MS: 800,
-  BOOST_MS: 3000, BOOST: 1.6, BOLT_HIT: 28,
+  BOOST_MS: 3000, BOOST: 1.6, BOLT_HIT: 32,
   // Five trolls wander the map at random, keeping far apart. Head bump: the leader loses time.
   // Body hit: the snake breaks. A head with no tail gets knocked out.
   TROLL_COUNT: 5, TROLL_APART: 0.6, // keep at least this fraction of the arena radius between trolls
   CHAT_MAX: 80, CHAT_GAP_MS: 1200,
   TROLL_SPEED: 90, TROLL_TURN: 2,
-  TROLL_HEAD_HIT: 34, TROLL_BODY_HIT: 26, TROLL_COOL_MS: 4000, TROLL_TIME_COST_MS: 5000,
+  TROLL_HEAD_HIT: 36, TROLL_BODY_HIT: 31, TROLL_COOL_MS: 4000, TROLL_TIME_COST_MS: 5000,
   AUTOPILOT_MS: 1000, AFK_MS: 8000,
   MIN_REACTION_MS: 120, GO_WARN_MS: 1200,
 };
@@ -49,7 +50,7 @@ class Game {
     this.pinger = setInterval(() => this.ping(), 2000);
   }
 
-  radiusFor(n) { return 800 + 30 * Math.sqrt(n); }
+  radiusFor(n) { return 850 + 45 * Math.sqrt(n); }
 
   // ---------- Players and snakes ----------
   makeSnake(members) {
@@ -105,6 +106,48 @@ class Game {
     s.members.splice(i, 1);
     if (!s.members.length) { this.snakes.splice(this.snakes.indexOf(s), 1); return; }
     if (i === 0) { this.promote(s); this.event({ k: 'turn', sid: s.id, head: s.members[0].pid, prev: p.pid, ms: 0, why: 'left' }); }
+  }
+
+  // ---------- Heads with no tail ----------
+  // A lone head has SOLO_MS to get a tail (steal some, or win a head-on with a bigger snake). The clock
+  // pauses while nobody else is in the arena, since there'd be no one to get a tail from.
+  soloClock(s) {
+    const h = s.members[0];
+    if (!s.soloSince) { s.soloSince = this.now; s.leaderSince = this.now; s.bumpedBy = 0; }
+    if (this.snakes.length < 2) { s.leaderSince = this.now; return; }
+    if (this.now - s.leaderSince < CFG.SOLO_MS) return;
+    // Out of time. If another player bumped you this time around, you join their tail instead.
+    const by = s.bumpedBy && this.players.get(s.bumpedBy), bs = by && this.snakeOf(by);
+    if (bs && bs !== s) {
+      s.members.length = 0; this.snakes.splice(this.snakes.indexOf(s), 1);
+      const t = bs.members[bs.members.length - 1];
+      h.x = t.x; h.y = t.y; bs.members.push(h);
+      bs.grace = Math.max(bs.grace, this.now + CFG.STEAL_GRACE_MS);
+      this.event({ k: 'absorb', victim: h.pid, by: by.pid, sid: bs.id, x: Math.round(h.x), y: Math.round(h.y) });
+    } else {
+      this.event({ k: 'out', sid: s.id, pid: h.pid, x: Math.round(h.x), y: Math.round(h.y) });
+      this.eliminate(h, 'time');
+    }
+  }
+
+  // Two heads with no tails bump: both lose time and bounce apart
+  bump(s, t) {
+    const a = s.members[0], b = t.members[0];
+    for (const [me, other] of [[s, b], [t, a]]) {
+      if (!me.soloSince) { me.soloSince = this.now; }
+      me.leaderSince -= CFG.BUMP_COST_MS; me.bumpedBy = other.pid;
+      me.grace = this.now + CFG.GRACE_MS;
+    }
+    const ang = Math.atan2(b.y - a.y, b.x - a.x);
+    a.angle = a.target = ang + Math.PI; b.angle = b.target = ang;
+    a.x -= Math.cos(ang) * 12; a.y -= Math.sin(ang) * 12; b.x += Math.cos(ang) * 12; b.y += Math.sin(ang) * 12;
+    a.lastSteer = b.lastSteer = this.now - CFG.AUTOPILOT_MS + 400; // a short moment before steering takes over again
+    this.event({ k: 'bump', a: a.pid, b: b.pid, ms: CFG.BUMP_COST_MS, x: Math.round((a.x + b.x) / 2), y: Math.round((a.y + b.y) / 2) });
+    // Whoever this pushed past zero joins the other's tail; if both, the one with less time left does
+    const left = x => CFG.SOLO_MS - (this.now - x.leaderSince);
+    const out = [s, t].filter(x => left(x) <= 0).sort((x, y) => left(x) - left(y));
+    if (out.length) out[0].leaderSince = this.now - CFG.SOLO_MS; // settles on the next tick via soloClock
+    if (out.length === 2) out[1].leaderSince = this.now - CFG.SOLO_MS + 1500; // survives just long enough to receive the other
   }
 
   // ---------- Trolls ----------
@@ -213,6 +256,8 @@ class Game {
 
   leadership(s) {
     const h = s.members[0];
+    if (s.members.length === 1) { this.soloClock(s); return; }
+    if (s.soloSince) { s.soloSince = 0; s.bumpedBy = 0; } // got a tail: back to a normal turn
     if (s.members.length > 1 && this.now - h.lastInput > CFG.AFK_MS && s.members.some(p => p !== h && this.active(p))) { this.endTurn(s, 'afk'); return; }
     if (this.now - s.leaderSince >= CFG.LEAD_MS) { this.endTurn(s, 'time'); return; }
     const r = s.race;
@@ -248,8 +293,10 @@ class Game {
     const r = Math.hypot(h.x, h.y);
     if (r > this.arenaR) { h.x *= this.arenaR / r; h.y *= this.arenaR / r; }
     for (let i = 1; i < m.length; i++) {
+      // The first follower keeps extra distance so the head's ring and crown never hide them
+      const gap = i === 1 ? CFG.SPACING + 20 : CFG.SPACING;
       const a = m[i - 1], p = m[i], dx = a.x - p.x, dy = a.y - p.y, dist = Math.hypot(dx, dy);
-      if (dist > CFG.SPACING) { const mv = Math.min(dist - CFG.SPACING, CFG.SPEED * 2.5 * dt); p.x += dx / dist * mv; p.y += dy / dist * mv; }
+      if (dist > gap) { const mv = Math.min(dist - gap, CFG.SPEED * 2.5 * dt); p.x += dx / dist * mv; p.y += dy / dist * mv; }
     }
     for (let i = 0; i < this.bolts.length; i++) {
       const b = this.bolts[i];
@@ -284,6 +331,8 @@ class Game {
         s.grace = this.now + CFG.GRACE_MS;
         const ns = this.makeSnake(tail);
         this.event({ k: 'bite', sid: s.id, nsid: ns.id, k2: hit.k, n: tail.length, x, y });
+      } else if (hit.k === 0 && s.members.length === 1 && t.members.length === 1) {
+        this.bump(s, t);
       } else if (hit.k === 0) {
         // Head-on: the bigger snake captures the other head
         const [win, lose] = s.members.length >= t.members.length ? [s, t] : [t, s];
