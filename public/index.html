@@ -271,7 +271,7 @@ select option { color: #0b1220; background: #fff; }
 
 @media (max-width: 640px) {
   #board, #brand { display: none; }
-  #mini { width: 86px; height: 86px; bottom: auto; top: calc(104px + env(safe-area-inset-top, 0px)); right: 12px; }
+  #mini { width: 86px; height: 86px; bottom: auto; top: calc(132px + env(safe-area-inset-top, 0px)); right: 12px; }
   #mock { bottom: auto; top: calc(104px + env(safe-area-inset-top, 0px)); left: 12px; max-width: calc(100% - 120px); padding: 8px; }
   #mock .label { display: none; }
   #toasts { top: calc(100px + env(safe-area-inset-top, 0px)); }
@@ -325,7 +325,7 @@ select option { color: #0b1220; background: #fff; }
 /* Phones: controls become a column on the left, below the top pills; the coffee button turns into an icon */
 @media (max-width: 640px) {
   #audioCtl { top: calc(12px + env(safe-area-inset-top, 0px)); left: 12px; }
-  #audioCtl.ingame { top: calc(104px + env(safe-area-inset-top, 0px)); flex-direction: column; }
+  #audioCtl.ingame { top: calc(132px + env(safe-area-inset-top, 0px)); flex-direction: column; }
   .abtn { width: 38px; height: 38px; }
   /* In game the bottom of a phone is the spotlight card, so the coffee button rides just above it */
   #donate { left: 12px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); height: 38px; padding: 0 13px 0 11px; font-size: 13px; }
@@ -445,6 +445,9 @@ select option { color: #0b1220; background: #fff; }
 .lm-stay:hover, .lm-stay:focus-visible { background: rgba(255,255,255,.14); }
 .lm-leave { color: #fff; background: linear-gradient(180deg, #ff6b81, #e11d48); border: 0; box-shadow: 0 4px 0 #9f1239; }
 .lm-leave:hover, .lm-leave:focus-visible { transform: translateY(-1px); }
+#bossBar { font-size: 12.5px; font-weight: 800; padding: 4px 12px; border-radius: 999px; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; border-color: rgba(167,139,250,.5); font-variant-numeric: tabular-nums; }
+#bossBar.warn { background: linear-gradient(180deg, #ff8a9e, #f43f5e); color: #2a0610; border-color: transparent; animation: urgent .5s ease-in-out infinite alternate; }
+#bossBar.enraged { border-color: #ff5f7e; color: #ffd1d9; box-shadow: 0 0 18px rgba(244,63,94,.45); }
 #joinErr { margin: 0; color: #ff8fa3; font-weight: 700; font-size: 14px; }
 #status.lead.urgent { background: linear-gradient(180deg, #ff8a9e, #f43f5e); color: #2a0610; animation: urgent .6s ease-in-out infinite alternate; }
 @keyframes urgent { to { transform: scale(1.04); box-shadow: 0 8px 30px rgba(244,63,94,.55); } }
@@ -460,6 +463,7 @@ select option { color: #0b1220; background: #fff; }
 <div class="hud" id="top">
   <div id="count" class="glass"><span class="live-dot"></span><span><b id="n">0</b> <span id="countTail">playing</span></span></div>
   <div id="status" class="glass" hidden></div>
+  <div id="bossBar" class="glass" hidden></div>
 </div>
 
 <div class="hud glass" id="board">
@@ -682,6 +686,7 @@ select option { color: #0b1220; background: #fff; }
 <div id="duel" hidden><div id="tapfx" aria-hidden="true"></div></div>
 
 <script src="/audio.js" defer></script>
+<script src="/boss.js" defer></script>
 <script src="/app.js" defer></script>
 </body>
 </html>

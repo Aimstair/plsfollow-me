@@ -221,6 +221,8 @@
       }
       case 'ev': m.l.forEach(onEvent); break;
       case 'race': onRaceBoard(m); break;
+      case 'boss': if (window.PFBoss) PFBoss.onSnapshot(m); break;
+      case 'bossAtk': if (window.PFBoss) PFBoss.onAttack(m.a); break;
       case 'tapr': onTapResult(m); break;
       case 'opened':
         if (spot) {
@@ -261,6 +263,8 @@
         shake.a = e.head === myPid ? 12 : 6; sfx('troll');
         toast(e.head === myPid ? `👹 A troll bumped you: −${e.ms / 1000}s of your turn!` : `👹 A troll bumped the head: −${e.ms / 1000}s. The race comes sooner!`);
       }
+    } else if (e.k === 'grass' || e.k === 'bossHit') {
+      if (window.PFBoss) PFBoss.onEvent(e, { pid: myPid, sid: me0.sid, idx: me0.idx });
     } else if (e.k === 'bump') {
       burst(e.x, e.y, 30, ['#ffc93c', '#ff5f7e', '#fff'], { speed: 340, life: 650, size: 5 });
       if (e.a === myPid || e.b === myPid) { shake.a = 12; sfx('crash'); toast(`💥 Head bump with ${name(e.a === myPid ? e.b : e.a)}! −${e.ms / 1000}s for both of you`); }
@@ -717,6 +721,8 @@
     drawArena(view.arenaR);
     for (const b of view.bolts) drawBolt(b);
     for (const t of view.trolls) drawTroll(t);
+    const bossNow = performance.now() + offset - net.behind; // same moment as the snakes on screen
+    if (window.PFBoss) PFBoss.drawGround(ctx, bossNow);
 
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
     ctx.save(); ctx.translate(4, 9);
@@ -751,6 +757,7 @@
       }
     }
     for (const s of view.snakes) { const h = s.members[0]; if (inView(h.x, h.y, 120)) drawHead(s, h); }
+    if (window.PFBoss) PFBoss.drawTop(ctx, bossNow, focus);
     drawRings();
 
     for (const p of parts) {
@@ -812,6 +819,7 @@
     for (const b of view.bolts) { mctx.beginPath(); mctx.arc(c + b.x * k, c + b.y * k, 3.5, 0, TAU); mctx.fill(); }
     mctx.fillStyle = '#c084fc';
     for (const t of view.trolls) { mctx.beginPath(); mctx.arc(c + t.x * k, c + t.y * k, 3.5, 0, TAU); mctx.fill(); }
+    if (window.PFBoss) PFBoss.mini(mctx, c, k, performance.now() + offset - net.behind);
     for (const s of view.snakes) {
       mctx.beginPath();
       s.members.forEach((p, i) => (i ? mctx.lineTo : mctx.moveTo).call(mctx, c + p.x * k, c + p.y * k));
@@ -851,6 +859,7 @@
     if (now - hudAt < 120) return; hudAt = now;
     const online = ws && ws.readyState === 1;
     $('chatBtn').hidden = !myPid;
+    if (window.PFBoss) PFBoss.hud($('bossBar'), performance.now() + offset - net.behind);
     $('backBtn').hidden = !(myPid || spectating) || !$('intro').hidden;
     $('share').hidden = !mine;
     $('share').classList.toggle('ingame', $('intro').hidden);
@@ -1432,6 +1441,7 @@
   syncAudioButtons();
   if (DONATE_URL) { $('donate').href = DONATE_URL; $('donate').hidden = false; }
   $('donate').addEventListener('click', () => sfx('click'));
+  if (window.PFBoss) PFBoss.init({ burst, shake: a => { shake.a = Math.max(shake.a, a); }, sfx, toast, name });
   connect();
   requestAnimationFrame(frame);
 })();

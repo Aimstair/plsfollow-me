@@ -36,6 +36,11 @@ const LINES = {
   bite: ['oops lol', 'we bit ourselves 💀', 'my bad', 'who was driving 😭'],
   welcome: ['welcome!', 'hi new person 👋', 'hey hey', 'more people yay', 'welcome to the snake 🐍'],
   cheer: ['go go go 👑', 'nice turn', 'go left!!', 'faster lol', "we're getting so long", 'dodge the goblin!'],
+  bossWarn: ['THE ALGORITHM IS COMING 😱', 'oh no not again', 'everyone run 🏃', 'here it comes!!'],
+  bossHit: ['shadowbanned 💀', 'the algorithm hates me', 'ouch!!', 'why me 😭'],
+  bossGrass: ['touching grass 🌱', 'go touch grass everyone!', 'grass secured', 'log it off!!'],
+  bossDown: ['WE LOGGED IT OFF 🎉', 'gg algorithm', 'touch grass wins 🌱', 'free boosts!!'],
+  bossLeft: ['phew it left', 'see you in 3 min lol', 'we survived 😮‍💨'],
   idle: ['this is so chaotic lol', "who's tapping so fast", 'gm everyone', 'these goblins are evil', 'tap tap tap', 'lol the snake is huge', 'good luck everyone 🍀', 'hello 👋', 'anyone else on their lunch break', 'this is weirdly fun', 'i keep getting stolen 😭'],
 };
 const CHAT_GAP_MS = [5000, 11000];    // at most one host chat in this window, across all hosts
@@ -174,6 +179,14 @@ class House {
     else if (e.k === 'boost') this.say(this.botIn(e.sid, true), 'boost', 0.25);
     else if (e.k === 'troll' || e.k === 'break') this.say(this.botIn(e.sid), 'troll', 0.5);
     else if (e.k === 'bite') this.say(this.botIn(e.sid), 'bite', 0.5);
+    else if (e.k === 'bossHit') this.say(this.botIn(e.sid), 'bossHit', 0.35);
+    else if (e.k === 'grass') this.say(g.players.get(e.pid), 'bossGrass', 0.4);
+  }
+  onBoss(kind) {
+    const alive = this.slots.map(s => s.player).filter(p => p && this.g.players.has(p.pid));
+    if (!alive.length) return;
+    const p = alive[Math.floor(Math.random() * alive.length)];
+    this.say(p, kind === 'warning' ? 'bossWarn' : kind === 'down' ? 'bossDown' : 'bossLeft', 0.8);
   }
   onJoin(p, s) {
     if (p.bot || !s) return;
@@ -191,6 +204,8 @@ class House {
       const d = Math.hypot(t.x - h.x, t.y - h.y);
       if (d < 190) { want = Math.atan2(h.y - t.y, h.x - t.x); break; }
     }
+    // Dodge the Algorithm's warnings (they react a beat late now and then, like people do)
+    if (want === null && g.boss.present && Math.random() < 0.85) { const d = g.boss.danger(h); if (d !== null) want = d; }
     if (want === null && Math.hypot(h.x, h.y) > R * 0.82) want = Math.atan2(-h.y, -h.x) + rand(-0.4, 0.4);
     if (want === null) {
       if (g.now > mind.until) this.plan(s, h);
@@ -210,6 +225,12 @@ class House {
     const hunt = o => { const k = Math.min(o.members.length - 1, 1 + Math.floor(rand(1, Math.min(6, o.members.length)))); return () => o.members[k] || null; };
     if (rivals.length && Math.random() < 0.3) { mind.mode = 'fight'; mind.aim = hunt(rivals[Math.floor(Math.random() * rivals.length)]); return; }
     if ((lonely || Math.random() < 0.3) && near.length) { mind.mode = 'hunt'; mind.aim = hunt(near[Math.floor(Math.random() * near.length)]); return; }
+    // While the Algorithm is down, grass is worth chasing
+    if (g.boss.present && g.boss.grass.length && Math.random() < 0.55) {
+      let gr = null, gd = 900;
+      for (const o of g.boss.grass) { const d = Math.hypot(o.x - h.x, o.y - h.y); if (d < gd) { gd = d; gr = o; } }
+      if (gr) { mind.mode = 'grass'; mind.aim = () => (g.boss.grass.includes(gr) ? gr : null); return; }
+    }
     let bolt = null, bd = 500;
     for (const b of g.bolts) { const d = Math.hypot(b.x - h.x, b.y - h.y); if (d < bd) { bd = d; bolt = b; } }
     if (bolt && Math.random() < 0.7) { mind.mode = 'boost'; mind.aim = () => (g.bolts.includes(bolt) ? bolt : null); return; }

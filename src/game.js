@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const { Fame } = require('./fame');
 const { House } = require('./house');
 const { Paid } = require('./paid');
+const { Boss } = require('./boss');
 
 const CFG = {
   TICK_MS: 50,
@@ -55,6 +56,7 @@ class Game {
     this.fame = new Fame(process.env.DATA_DIR);
     this.paid = new Paid(process.env.DATA_DIR);
     this.house = new House(this);
+    this.boss = new Boss(this);
     this.fameSent = -1;
     this.fameTimer = setInterval(() => this.flushFame(), 5000);
     this.timer = setInterval(() => this.tick(), CFG.TICK_MS);
@@ -199,6 +201,7 @@ class Game {
       }
       if (px || py) want = Math.atan2(py, px);
       if (Math.hypot(t.x, t.y) > this.arenaR * 0.85) want = Math.atan2(-t.y, -t.x);
+      else if (this.boss.present && Math.hypot(t.x, t.y) < 560) want = Math.atan2(t.y, t.x); // trolls keep away from the Algorithm
       let d = want - t.angle; d = Math.atan2(Math.sin(d), Math.cos(d));
       const mt = CFG.TROLL_TURN * dt; t.angle += Math.max(-mt, Math.min(mt, d));
       t.x += Math.cos(t.angle) * CFG.TROLL_SPEED * dt; t.y += Math.sin(t.angle) * CFG.TROLL_SPEED * dt;
@@ -251,7 +254,8 @@ class Game {
     this.house.tick();
     let segs = 0; for (const s of this.snakes) segs += s.members.length;
     this.arenaR += (this.radiusFor(segs) - this.arenaR) * 0.01;
-    const wantBolts = Math.min(33, 9 + Math.floor(Math.sqrt(segs))); // ⚡ boosts on the map
+    // ⚡ boosts on the map (plus a few extra after the Algorithm gets logged off)
+    const wantBolts = Math.min(33, 9 + Math.floor(Math.sqrt(segs))) + (this.now < (this.bonusBoltsUntil || 0) ? this.bonusBolts : 0);
     while (this.bolts.length < wantBolts) this.bolts.push(this.spawnBolt());
     if (this.bolts.length > wantBolts) this.bolts.length = wantBolts;
 
@@ -261,6 +265,7 @@ class Game {
     this.moveTrolls(dt);
     this.collide();
     this.trollHits();
+    this.boss.tick();
     this.flushRaceBoards();
     this.broadcast();
 
@@ -465,6 +470,7 @@ class Game {
     const l = []; for (const p of this.players.values()) l.push(this.profileRow(p));
     if (l.length) this.send(c, { t: 'prof', l });
     this.send(c, { t: 'fame', day: this.fame.day, top: this.fame.top() });
+    this.send(c, this.boss.snapshot());
     ws.on('pong', () => { c.alive = true; if (c.pingAt) c.rtt = Date.now() - c.pingAt; });
     return c;
   }
@@ -679,7 +685,7 @@ class Game {
   }
 
   health() {
-    return { ok: true, humans: this.humans, hosts: this.hostCount(), trolls: this.trolls.length, snakes: this.snakes.length, clients: this.clients.size, tickAvgMs: +this.perf.avg.toFixed(2), tickPeakMs: +this.perf.peak.toFixed(2) };
+    return { boss: this.boss.phase, ok: true, humans: this.humans, hosts: this.hostCount(), trolls: this.trolls.length, snakes: this.snakes.length, clients: this.clients.size, tickAvgMs: +this.perf.avg.toFixed(2), tickPeakMs: +this.perf.peak.toFixed(2) };
   }
 
   stop() { clearInterval(this.timer); clearInterval(this.pinger); clearInterval(this.fameTimer); this.fame.dirty = true; this.fame.save(); }

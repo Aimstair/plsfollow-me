@@ -31,6 +31,8 @@ It prints messages received, race taps accepted/rejected, and the server's tick 
 |---|---|
 | `server.js` | HTTP static files, `/healthz`, avatar images at `/a/<boot>/<pid>`, WebSocket at `/ws` |
 | `src/house.js` | Host accounts played by the server (edit `GROUPS` at the top to change them) |
+| `src/boss.js` | THE ALGORITHM boss: cycle, telegraphed attacks, hits, 🌱 grass (`BOSS_FIRST_MS` env shortens the first landing for testing) |
+| `public/boss.js` | Draws the boss, its warnings and attacks, grass, boss bar and minimap marker |
 | `src/paid.js` | Paid bots: $5 Stripe Checkout, signed webhook, 30-day orders saved to `DATA_DIR` |
 | `src/fame.js` | Today's spotlight hall of fame (most-opened profiles), saved to `DATA_DIR` |
 | `src/game.js` | Authoritative 20 Hz simulation: snakes, turns, races, steals, bites, trolls, binary state encoding |

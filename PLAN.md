@@ -220,3 +220,38 @@ add visibility and never decide who wins.
 - Domain: already bought.
 - Fly.io: one shared-cpu machine is about $2–5/mo. Bandwidth is the main cost if the game
   goes viral, which is why the per-viewport state in M4 matters.
+
+
+---
+
+## 7. Boss: THE ALGORITHM 👁️
+
+A giant chrome eye that drops into the center of the arena, sweeps it with attacks, and leaves.
+
+**Cycle:** first landing ~60s after the server starts → **8s warning** (siren, growing shadow at the center)
+→ **lands** (Slam) → **2 minutes** on the map (attacks every 4–6s; last 30s **enraged**: every 2–3s, red eye,
+Doomscroll unlocked) → leaves → **3-minute cooldown** → next warning.
+
+**Every attack is telegraphed** with a red outline 1–1.5s before it does damage.
+
+| Attack | Warning | Effect area |
+|---|---|---|
+| 💥 Slam (landing) | shadow growing at center | everything within 350px of center |
+| 🔴 Shadowban beam | thin red lines from the eye | 1–3 lasers (900px × 36px) sweep 90–120° over 2.2s |
+| 🌋 Unfollow stomp | glowing cracks | 4–6 zigzag fractures erupt outward in sequence, then a shockwave ring expands across the map with 1–2 gaps to steer through (the ring only knocks heads; fractures split bodies) |
+| ☄️ Ratio rain | red circles | 3–10 impacts (70px) aimed ahead of leaders, 1.5s warning |
+| 🌀 Doomscroll (enraged only) | swirl | pulls every snake toward the center for 3s |
+| 👁️ Body contact | the boss itself | bumping the boss |
+
+**Getting hit** (once per attack, then 1.5s of safety):
+- **Body:** the snake splits at the first segment hit.
+- **Head:** −5s of the turn (or of the no-tail timer), knockback, 0.8s stun (no steering, half speed).
+
+**Fighting back: 🌱 Touch grass.** While it's down, a grass token appears every ~5s (up to 4 at once, each
+lasts 15s) 250–700px from the center. Any head that touches one takes **6s off the Algorithm's stay**.
+Cut **30s or more** off its stay in total and it's **logged off** when it leaves: it explodes, a shower of ⚡ boosts spills out, and
+everyone sees who touched the last grass. Otherwise it leaves on its own.
+
+**Also:** trolls flee to the edges while it's down; hosts dodge warnings (not perfectly) and go for grass;
+attacks favor big snakes and leaders. The server runs the boss and checks every hit; clients draw it in sync
+using the shared game clock.

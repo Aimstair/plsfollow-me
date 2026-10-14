@@ -32,7 +32,7 @@ const game = new Game();
 const crypto = require('crypto');
 const INDEX = (() => {
   const html = fs.readFileSync(path.join(PUB, 'index.html'), 'utf8');
-  return html.replace(/src="\/(app|audio)\.js"/g, (m, name) => {
+  return html.replace(/src="\/(app|audio|boss)\.js"/g, (m, name) => {
     const v = crypto.createHash('sha1').update(fs.readFileSync(path.join(PUB, `${name}.js`))).digest('hex').slice(0, 10);
     return `src="/${name}.js?v=${v}"`;
   });

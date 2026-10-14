@@ -190,6 +190,16 @@ window.PFAudio = (() => {
     lose: t => { tone(mtof(71), t, { type: 'triangle', dur: 0.22, gain: 0.2 }); tone(mtof(67), t + 0.16, { type: 'triangle', dur: 0.22, gain: 0.2 }); tone(mtof(62), t + 0.32, { type: 'triangle', dur: 0.5, gain: 0.2, verb: 0.3 }); },
     opened: t => { tone(1320, t, { dur: 0.5, gain: 0.13, verb: 0.35 }); tone(1980, t + 0.07, { dur: 0.6, gain: 0.09, verb: 0.35 }); },
     turn: t => { tone(mtof(76), t, { dur: 0.35, gain: 0.1, verb: 0.3 }); tone(mtof(83), t + 0.1, { dur: 0.45, gain: 0.08, verb: 0.3 }); },
+    // The Algorithm
+    bossSiren: t => { for (let i = 0; i < 3; i++) { tone(620, t + i * 0.7, { type: 'sawtooth', dur: 0.35, gain: 0.12, to: 940, filter: 2200, verb: 0.2 }); tone(940, t + i * 0.7 + 0.35, { type: 'sawtooth', dur: 0.35, gain: 0.12, to: 620, filter: 2200, verb: 0.2 }); } },
+    bossSlam: t => { tone(90, t, { dur: 0.9, gain: 0.5, to: 30, verb: 0.3 }); whoosh(t, 2200, 120, 0.8, 0.45); },
+    bossCharge: t => { tone(180, t, { type: 'sawtooth', dur: 1.25, gain: 0.08, to: 900, filter: 1600 }); tone(1200, t + 1.25, { type: 'square', dur: 0.5, gain: 0.05, to: 1100, filter: 2500 }); },
+    bossCrack: t => { whoosh(t + 1.1, 3000, 300, 0.4, 0.4); tone(70, t + 1.15, { dur: 0.5, gain: 0.4, to: 35, verb: 0.2 }); },
+    bossRain: t => { tone(1600, t, { type: 'sine', dur: 1.4, gain: 0.07, to: 300 }); whoosh(t + 1.45, 1800, 200, 0.35, 0.35); },
+    bossDoom: t => { tone(55, t, { type: 'sawtooth', dur: 3.2, gain: 0.12, to: 40, filter: 400, verb: 0.4 }); },
+    bossGrass: t => [76, 81, 86].forEach((n, i) => tone(mtof(n), t + i * 0.06, { type: 'triangle', dur: 0.3, gain: 0.16, verb: 0.3 })),
+    bossDown: t => { [72, 76, 79, 84, 88].forEach((n, i) => tone(mtof(n), t + i * 0.1, { type: 'triangle', dur: 0.6, gain: 0.2, verb: 0.4 })); tone(80, t, { dur: 0.8, gain: 0.4, to: 30 }); },
+    bossLeave: t => { whoosh(t, 200, 3000, 1.2, 0.3); tone(300, t, { dur: 1.2, gain: 0.08, to: 900 }); },
     chat: t => { tone(780, t, { type: 'sine', dur: 0.09, gain: 0.12, to: 1150, verb: 0.1 }); },
     click: t => tone(900, t, { type: 'triangle', dur: 0.04, gain: 0.12, verb: 0 }),
   };
