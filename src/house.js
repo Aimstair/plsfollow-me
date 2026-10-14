@@ -225,8 +225,9 @@ class House {
 
   // ---------- The ace (ericmar.g) ----------
   // Re-plans 3x as often, always hunts the juiciest tail it can reach (aiming just behind the head to take
-  // the most), leads its target, never picks a head-on with a bigger snake, never bites itself, grabs boosts
-  // and boss tokens, and dodges boss attacks by looking ahead along 24 headings instead of reacting late.
+  // the most), leads its target, never picks a head-on with a bigger snake, never bites itself, and grabs
+  // boosts when there's nobody to rob. It ignores boss tokens (stealing comes first) but dodges boss attacks
+  // by looking ahead along 36 headings instead of reacting late.
   aceSteer(s, h) {
     const g = this.g, mind = h.mind, R = g.arenaR, speed = 190 * 1.1;
     if (g.now > mind.until || !(mind.aim && mind.aim())) this.acePlan(s, h);
@@ -250,20 +251,14 @@ class House {
     }
     if (Math.hypot(h.x, h.y) > R * 0.86) want = Math.atan2(-h.y, -h.x);
     if (g.boss.phase === 'warning' && Math.hypot(h.x, h.y) < 480) want = Math.atan2(h.y, h.x); // clear the landing zone
-    const safe = g.boss.present ? g.boss.safeHeading(h, want, speed, mind.mode === 'token' ? a : null) : null;
+    const safe = g.boss.present ? g.boss.safeHeading(h, want, speed) : null;
     h.target = safe !== null ? safe : want;
   }
 
   acePlan(s, h) {
-    const g = this.g, mind = h.mind, B = g.boss;
+    const g = this.g, mind = h.mind;
     mind.until = g.now + rand(500, 1000);
     const dist = p => Math.hypot(p.x - h.x, p.y - h.y);
-    // Boss tokens first when one is close: they end the fight and the ace wants the credit
-    if (B.present && B.tokens.length) {
-      let tk = null, best = 1300;
-      for (const o of B.tokens) { const d = dist(B.tokenPos(o)); if (d < best) { best = d; tk = o; } }
-      if (tk && (best < 650 || Math.random() < 0.6)) { mind.mode = 'token'; mind.aim = () => (B.tokens.includes(tk) ? B.tokenPos(tk) : null); return; }
-    }
     // The best tail to steal: most segments taken per distance travelled, skipping snakes that can't be hit yet
     let pick = null, score = 0;
     for (const o of g.snakes) {
