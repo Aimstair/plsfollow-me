@@ -421,14 +421,30 @@ select option { color: #0b1220; background: #fff; }
 .bm-fine { margin: -2px 0 0; color: var(--muted); font-size: 12px; }
 @media (prefers-reduced-motion: reduce) { .bm-snake i, .bm-head, .bm-spark { animation: none; } }
 #botErr { margin: 0; color: #ff8fa3; font-weight: 700; font-size: 14px; }
-#about { width: min(400px, 100%); text-align: left; display: grid; gap: 10px; margin-top: 6px; color: #c9d6e2; padding: 6px 16px 16px; border-radius: 20px; background: rgba(10, 16, 30, .9); border: 1px solid var(--line); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
-#about h2 { margin: 6px 0 0; font-family: var(--display); font-weight: 400; font-size: 20px; color: var(--ink); }
+#about { text-align: left; display: grid; gap: 10px; color: #c9d6e2; }
+#about h2 { margin: 4px 0 0; font-family: var(--display); font-weight: 400; font-size: 20px; color: var(--ink); }
 #about .steps { margin: 0; padding-left: 20px; display: grid; gap: 6px; font-size: 14px; line-height: 1.45; }
 #about .steps b { color: var(--ink); }
 #about .faq { display: grid; gap: 6px; }
 #about details { border: 1px solid var(--line); border-radius: 12px; background: rgba(255,255,255,.05); padding: 0 12px; }
 #about summary { cursor: pointer; padding: 10px 0; font-weight: 800; font-size: 14px; color: var(--ink); list-style-position: inside; }
 #about details p { margin: 0 0 10px; font-size: 13.5px; line-height: 1.5; }
+#intro .linkbtn { background: none; border: 0; padding: 4px 6px; color: var(--muted); font: 700 13.5px var(--body); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+#intro .linkbtn:hover, #intro .linkbtn:focus-visible { color: var(--ink); }
+#aboutModal { position: fixed; inset: 0; z-index: 12; display: grid; place-items: center; padding: 16px; background: rgba(4, 8, 16, .8); backdrop-filter: blur(6px); }
+#aboutModal .box { position: relative; width: min(460px, 100%); max-height: calc(100vh - 32px); max-height: calc(100dvh - 32px); overflow-y: auto; padding: 18px 20px 20px; border-radius: 24px; animation: pop .25s cubic-bezier(.2, 1.4, .4, 1); }
+#aboutModal #aboutTitle { padding-right: 40px; }
+#leaveModal .box, #aboutModal .box, #botModal .box, #shareModal .box { box-sizing: border-box; }
+#leaveModal { position: fixed; inset: 0; z-index: 12; display: grid; place-items: center; padding: 16px; background: rgba(4, 8, 16, .72); backdrop-filter: blur(4px); }
+#leaveModal .box { width: min(360px, 100%); padding: 22px 20px 18px; border-radius: 22px; display: grid; gap: 10px; text-align: center; animation: pop .25s cubic-bezier(.2, 1.4, .4, 1); }
+#leaveModal h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 26px; }
+#leaveModal p { margin: 0 0 6px; color: var(--muted); font-size: 14px; line-height: 1.45; }
+.lm-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.lm-actions button { font: 800 15px var(--body); padding: 12px; border-radius: 14px; cursor: pointer; transition: transform .1s, background .15s; }
+.lm-stay { color: var(--ink); background: rgba(255,255,255,.08); border: 1px solid var(--line); }
+.lm-stay:hover, .lm-stay:focus-visible { background: rgba(255,255,255,.14); }
+.lm-leave { color: #fff; background: linear-gradient(180deg, #ff6b81, #e11d48); border: 0; box-shadow: 0 4px 0 #9f1239; }
+.lm-leave:hover, .lm-leave:focus-visible { transform: translateY(-1px); }
 #joinErr { margin: 0; color: #ff8fa3; font-weight: 700; font-size: 14px; }
 #status.lead.urgent { background: linear-gradient(180deg, #ff8a9e, #f43f5e); color: #2a0610; animation: urgent .6s ease-in-out infinite alternate; }
 @keyframes urgent { to { transform: scale(1.04); box-shadow: 0 8px 30px rgba(244,63,94,.55); } }
@@ -547,25 +563,7 @@ select option { color: #0b1220; background: #fff; }
       <ol id="fameList"></ol>
     </section>
     <small id="introNote">Live right now. Jump in!</small>
-    <section id="about" aria-labelledby="aboutTitle">
-      <h2 id="aboutTitle">How it works</h2>
-      <ol class="steps">
-        <li><b>Join the tail.</b> Add your handle and photo (optional). You're one segment of a giant snake of real people.</li>
-        <li><b>Tap to lead.</b> During each 30-second turn, tap anywhere. Most taps when the timer ends becomes the next head.</li>
-        <li><b>Get seen.</b> While you lead, everyone in the snake sees your profile and can open it with one tap.</li>
-      </ol>
-      <h2>FAQ</h2>
-      <div class="faq">
-        <details><summary>What is plsfollow.me?</summary><p>plsfollow.me is a free multiplayer snake game you play in your browser. Every player is one segment of a giant snake made of strangers. Each head leads for 30 seconds, and while you lead, everyone in the snake sees your Instagram, TikTok, X, Threads, YouTube or Twitch profile.</p></details>
-        <details><summary>How do I become the head of the snake?</summary><p>Tap anywhere on the screen during the current leader's 30-second turn. Whoever has the most taps when the timer runs out leads next. If nobody taps, the next person in line leads.</p></details>
-        <details><summary>Can plsfollow.me get me more followers?</summary><p>It gives your profile a spotlight: while you lead, everyone in your snake sees your handle and can open your profile with one tap. Following is always their choice, so there are no follow-for-follow rules and no guaranteed numbers. Today's most-opened profiles appear on the Spotlight board.</p></details>
-        <details><summary>Is plsfollow.me free?</summary><p>Yes. The game is free with no account and no download. The only paid option is "Become a bot": for $5, a bot plays as your profile for 30 days and is marked as promoted.</p></details>
-        <details><summary>Does it work on phones?</summary><p>Yes. It runs in any modern mobile or desktop browser. Steer with your finger or mouse, or with the arrow keys and A/D on a keyboard.</p></details>
-        <details><summary>What are the purple trolls?</summary><p>Goblin-like trolls roam the arena. Bump one with your head and you lose 5 seconds of your turn; let one hit your body and your snake breaks in two. A head with no tail that touches a troll is knocked out.</p></details>
-        <details><summary>How do I steal people from another snake?</summary><p>Steer your head into another snake's body. Everyone from that point to the tail joins your snake. Grab a lightning boost to move faster while you hunt.</p></details>
-        <details><summary>What happens to my photo and handle?</summary><p>Your handle, platform and photo are remembered in your own browser so you don't have to re-enter them. Photos you play with are kept on the server only while you're playing.</p></details>
-      </div>
-    </section>
+    <button class="linkbtn" type="button" id="aboutBtn">How it works · FAQ</button>
   </div>
 </div>
 
@@ -653,6 +651,31 @@ select option { color: #0b1220; background: #fff; }
       <button class="lm-stay" id="leaveStay">Stay</button>
       <button class="lm-leave" id="leaveGo">Leave</button>
     </div>
+  </div>
+</div>
+
+<div id="aboutModal" hidden>
+  <div class="box glass" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
+    <button class="iconbtn sm-close" id="aboutClose" aria-label="Close">✕</button>
+      <section id="about" aria-labelledby="aboutTitle">
+        <h2 id="aboutTitle">How it works</h2>
+        <ol class="steps">
+          <li><b>Join the tail.</b> Add your handle and photo (optional). You're one segment of a giant snake of real people.</li>
+          <li><b>Tap to lead.</b> During each 30-second turn, tap anywhere. Most taps when the timer ends becomes the next head.</li>
+          <li><b>Get seen.</b> While you lead, everyone in the snake sees your profile and can open it with one tap.</li>
+        </ol>
+        <h2>FAQ</h2>
+        <div class="faq">
+          <details><summary>What is plsfollow.me?</summary><p>plsfollow.me is a free multiplayer snake game you play in your browser. Every player is one segment of a giant snake made of strangers. Each head leads for 30 seconds, and while you lead, everyone in the snake sees your Instagram, TikTok, X, Threads, YouTube or Twitch profile.</p></details>
+          <details><summary>How do I become the head of the snake?</summary><p>Tap anywhere on the screen during the current leader's 30-second turn. Whoever has the most taps when the timer runs out leads next. If nobody taps, the next person in line leads.</p></details>
+          <details><summary>Can plsfollow.me get me more followers?</summary><p>It gives your profile a spotlight: while you lead, everyone in your snake sees your handle and can open your profile with one tap. Following is always their choice, so there are no follow-for-follow rules and no guaranteed numbers. Today's most-opened profiles appear on the Spotlight board.</p></details>
+          <details><summary>Is plsfollow.me free?</summary><p>Yes. The game is free with no account and no download. The only paid option is "Become a bot": for $5, a bot plays as your profile for 30 days and is marked as promoted.</p></details>
+          <details><summary>Does it work on phones?</summary><p>Yes. It runs in any modern mobile or desktop browser. Steer with your finger or mouse, or with the arrow keys and A/D on a keyboard.</p></details>
+          <details><summary>What are the purple trolls?</summary><p>Goblin-like trolls roam the arena. Bump one with your head and you lose 5 seconds of your turn; let one hit your body and your snake breaks in two. A head with no tail that touches a troll is knocked out.</p></details>
+          <details><summary>How do I steal people from another snake?</summary><p>Steer your head into another snake's body. Everyone from that point to the tail joins your snake. Grab a lightning boost to move faster while you hunt.</p></details>
+          <details><summary>What happens to my photo and handle?</summary><p>Your handle, platform and photo are remembered in your own browser so you don't have to re-enter them. Photos you play with are kept on the server only while you're playing.</p></details>
+        </div>
+      </section>
   </div>
 </div>
 

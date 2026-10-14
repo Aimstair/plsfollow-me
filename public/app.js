@@ -1025,6 +1025,12 @@
   $('leaveModal').addEventListener('click', e => { if (e.target.id === 'leaveModal') closeLeave(); });
   $('leaveModal').addEventListener('keydown', e => { if (e.key === 'Escape') closeLeave(); });
   $('specBtn').addEventListener('click', startSpectate);
+  // How it works · FAQ
+  const closeAbout = () => { $('aboutModal').hidden = true; };
+  $('aboutBtn').addEventListener('click', () => { $('aboutModal').hidden = false; $('aboutClose').focus(); });
+  $('aboutClose').addEventListener('click', closeAbout);
+  $('aboutModal').addEventListener('click', e => { if (e.target.id === 'aboutModal') closeAbout(); });
+  $('aboutModal').addEventListener('keydown', e => { if (e.key === 'Escape') closeAbout(); });
 
   // ---------- Paid bot: your profile in the snake for 30 days ----------
   function openBotModal() {
