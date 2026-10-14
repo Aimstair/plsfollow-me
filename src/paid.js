@@ -46,6 +46,7 @@ class Paid {
     const extend = !!this.findActive(handle, platform);
     const form = new URLSearchParams({
       mode: 'payment',
+      'payment_method_types[0]': 'card', // ask for cards explicitly (Apple/Google Pay ride on cards)
       client_reference_id: id,
       'metadata[order]': id,
       success_url: `${origin}/?bot=success&order=${id}`,
