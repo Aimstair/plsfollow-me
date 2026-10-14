@@ -333,6 +333,7 @@
   const typing = e => e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT');
   addEventListener('keydown', e => {
     if (typing(e)) return;
+    if (!$('leaveModal').hidden) return; // the leave dialog has focus
     keys[e.key] = true;
     if (spectating && !myPid) {
       if (e.key === 'ArrowLeft' || e.key === 'a') { e.preventDefault(); specStep(-1); return; }
@@ -1016,8 +1017,13 @@
   }
   $('backBtn').addEventListener('click', () => {
     if (spectating) { stopSpectate(true); return; }
-    if (myPid && confirm('Leave the game? You will lose your spot in the snake.')) leaveGame();
+    if (myPid) { $('leaveModal').hidden = false; $('leaveStay').focus(); }
   });
+  const closeLeave = () => { $('leaveModal').hidden = true; };
+  $('leaveStay').addEventListener('click', closeLeave);
+  $('leaveGo').addEventListener('click', () => { closeLeave(); leaveGame(); });
+  $('leaveModal').addEventListener('click', e => { if (e.target.id === 'leaveModal') closeLeave(); });
+  $('leaveModal').addEventListener('keydown', e => { if (e.key === 'Escape') closeLeave(); });
   $('specBtn').addEventListener('click', startSpectate);
 
   // ---------- Paid bot: your profile in the snake for 30 days ----------
@@ -1129,6 +1135,7 @@
   function knockedOut(why) {
     if (spot) { stats.opens += spot.opens; spot = null; }
     myPid = 0; me = mine = null; joinInfo = null; closeRace();
+    $('leaveModal').hidden = true;
     shake.a = 16; sfx('out'); if (window.PFAudio) PFAudio.duck(3); closeChat();
     $('bottom').hidden = true; $('peek').hidden = true; $('shareModal').hidden = true;
     $('joinErr').hidden = true;
