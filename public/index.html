@@ -372,27 +372,35 @@ select option { color: #0b1220; background: #fff; }
 #joinForm .botbtn:hover, #joinForm .botbtn:focus-visible { transform: translateY(-1px); border-color: var(--crown); }
 #joinForm .botbtn b { font-family: var(--display); font-weight: 400; font-size: 20px; color: var(--crown); }
 #botNote { margin: 0; font-weight: 800; font-size: 14px; color: var(--crown); }
-#botModal { position: fixed; inset: 0; z-index: 12; display: grid; place-items: center; padding: 16px; background: rgba(4, 8, 16, .8); backdrop-filter: blur(6px); }
-#botModal .box { position: relative; width: min(440px, 100%); padding: 22px 20px 18px; border-radius: 24px; display: grid; gap: 12px; }
-#botModal h2 { margin: 0; padding-right: 40px; font-family: var(--display); font-weight: 400; font-size: 26px; line-height: 1.05; }
-.bm-lead { margin: 0; color: #d6e2ec; font-size: 14.5px; line-height: 1.45; }
-.bm-small { margin: 0; color: var(--muted); font-size: 12.5px; line-height: 1.4; }
-.bm-card { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 16px; background: rgba(255,255,255,.05); border: 1px solid var(--line); }
-.bm-card > div { min-width: 0; flex: 1; }
-.bm-ava { flex: none; width: 48px; height: 48px; border-radius: 50%; background: var(--c, #3a475a) center / cover; display: grid; place-items: center; font-family: var(--display); font-size: 22px; color: rgba(12,16,30,.85); box-shadow: 0 0 0 2px var(--crown); }
+#botModal { position: fixed; inset: 0; z-index: 12; display: grid; place-items: center; padding: 16px; overflow-y: auto; background: rgba(4, 8, 16, .8); backdrop-filter: blur(6px); }
+#botModal .box { position: relative; width: min(420px, 100%); padding: 0 20px 18px; border-radius: 26px; display: grid; gap: 12px; text-align: center; overflow: hidden; animation: pop .3s cubic-bezier(.2, 1.4, .4, 1); }
+#botModal h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 32px; line-height: 1; }
+.bm-hero { position: relative; height: 136px; margin: 0 -20px; padding-top: 18px; display: grid; place-items: center; background: radial-gradient(120% 100% at 50% 0%, rgba(255,201,60,.28), rgba(255,95,162,.14) 45%, transparent 75%), linear-gradient(180deg, rgba(23,50,82,.9), rgba(17,38,64,0)); }
+.bm-snake { display: flex; align-items: center; gap: 4px; }
+.bm-snake i { width: 22px; height: 22px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff8, transparent 40%), var(--c); box-shadow: 0 4px 10px rgba(0,0,0,.35); animation: bmWave 1.4s ease-in-out infinite; animation-delay: calc(var(--d) * -.18s); }
+.bm-head { position: relative; margin-left: 6px; animation: bmWave 1.4s ease-in-out infinite; animation-delay: -.9s; }
+.bm-crown { position: absolute; left: 50%; top: -22px; transform: translateX(-50%) rotate(-8deg); font-size: 22px; filter: drop-shadow(0 2px 3px rgba(0,0,0,.5)); }
+.bm-ava { display: grid; place-items: center; width: 62px; height: 62px; border-radius: 50%; background: var(--c, #ff5fa2) center / cover; font-family: var(--display); font-size: 28px; color: rgba(12,16,30,.85); box-shadow: 0 0 0 3px var(--crown), 0 0 0 7px rgba(255,201,60,.25), 0 10px 26px rgba(0,0,0,.45); }
+.bm-spark { position: absolute; color: var(--crown); text-shadow: 0 0 12px rgba(255,201,60,.8); animation: bmTwinkle 2.2s ease-in-out infinite; }
+.bm-spark.s1 { top: 18px; right: 22%; font-size: 18px; }
+.bm-spark.s2 { bottom: 20px; left: 20%; font-size: 12px; animation-delay: -.8s; }
+.bm-spark.s3 { top: 34px; left: 28%; font-size: 10px; animation-delay: -1.5s; }
+@keyframes bmWave { 0%, 100% { transform: translateY(-5px); } 50% { transform: translateY(5px); } }
+@keyframes bmTwinkle { 0%, 100% { opacity: .25; transform: scale(.8); } 50% { opacity: 1; transform: scale(1.15); } }
+.bm-sub { margin: -4px 0 2px; color: #d6e2ec; font-size: 15px; }
+.bm-sub b { color: var(--crown); }
+.bm-feats { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.bm-feats li { display: flex; align-items: center; gap: 8px; padding: 9px 10px; border-radius: 14px; background: rgba(255,255,255,.05); border: 1px solid var(--line); font-size: 13px; font-weight: 800; text-align: left; }
+.bm-feats li span { flex: none; width: 28px; height: 28px; border-radius: 9px; display: grid; place-items: center; font-size: 16px; background: rgba(255,255,255,.07); }
+.bm-card { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 16px; background: linear-gradient(90deg, rgba(255,201,60,.1), rgba(255,95,162,.08)); border: 1px solid rgba(255,201,60,.3); text-align: left; }
+.bm-who { min-width: 0; flex: 1; }
 .bm-name { font-family: var(--display); font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bm-meta { font-size: 12.5px; color: var(--muted); font-weight: 700; display: flex; gap: 5px; align-items: center; }
-.bm-tag { flex: none; font-size: 11px; font-weight: 900; color: var(--crown); background: rgba(255,201,60,.12); border: 1px solid rgba(255,201,60,.35); padding: 3px 8px; border-radius: 999px; }
-#leaveModal { position: fixed; inset: 0; z-index: 12; display: grid; place-items: center; padding: 16px; background: rgba(4, 8, 16, .72); backdrop-filter: blur(4px); }
-#leaveModal .box { width: min(360px, 100%); padding: 22px 20px 18px; border-radius: 22px; display: grid; gap: 10px; text-align: center; animation: pop .25s cubic-bezier(.2, 1.4, .4, 1); }
-#leaveModal h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 26px; }
-#leaveModal p { margin: 0 0 6px; color: var(--muted); font-size: 14px; line-height: 1.45; }
-.lm-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.lm-actions button { font: 800 15px var(--body); padding: 12px; border-radius: 14px; cursor: pointer; transition: transform .1s, background .15s; }
-.lm-stay { color: var(--ink); background: rgba(255,255,255,.08); border: 1px solid var(--line); }
-.lm-stay:hover, .lm-stay:focus-visible { background: rgba(255,255,255,.14); }
-.lm-leave { color: #fff; background: linear-gradient(180deg, #ff6b81, #e11d48); border: 0; box-shadow: 0 4px 0 #9f1239; }
-.lm-leave:hover, .lm-leave:focus-visible { transform: translateY(-1px); }
+.bm-price { flex: none; text-align: right; line-height: 1; }
+.bm-price b { display: block; font-family: var(--display); font-weight: 400; font-size: 28px; color: var(--crown); }
+.bm-price small { font-size: 11px; font-weight: 800; color: var(--muted); }
+.bm-fine { margin: -2px 0 0; color: var(--muted); font-size: 12px; }
+@media (prefers-reduced-motion: reduce) { .bm-snake i, .bm-head, .bm-spark { animation: none; } }
 #botErr { margin: 0; color: #ff8fa3; font-weight: 700; font-size: 14px; }
 #joinErr { margin: 0; color: #ff8fa3; font-weight: 700; font-size: 14px; }
 #status.lead.urgent { background: linear-gradient(180deg, #ff8a9e, #f43f5e); color: #2a0610; animation: urgent .6s ease-in-out infinite alternate; }
@@ -566,17 +574,28 @@ select option { color: #0b1220; background: #fff; }
 <div id="botModal" hidden>
   <div class="box glass" role="dialog" aria-modal="true" aria-labelledby="botTitle">
     <button class="iconbtn sm-close" id="botClose" aria-label="Close">✕</button>
-    <h2 id="botTitle">Your profile, in the snake 24/7</h2>
-    <p class="bm-lead">For 30 days a bot plays as your profile: it roams the arena, joins snakes, sometimes leads and chats a little, so your @ keeps getting seen while you're away.</p>
-    <div class="bm-card">
-      <span class="bm-ava" id="botAva"></span>
-      <div><div class="bm-name" id="botName"></div><div class="bm-meta" id="botMeta"></div></div>
-      <span class="bm-tag">✦ promoted</span>
+    <div class="bm-hero" aria-hidden="true">
+      <div class="bm-snake">
+        <i style="--d:0;--c:#a78bfa"></i><i style="--d:1;--c:#7dd3fc"></i><i style="--d:2;--c:#34d399"></i><i style="--d:3;--c:#ffc93c"></i><i style="--d:4;--c:#ff8cc0"></i>
+        <span class="bm-head"><span class="bm-crown">👑</span><span class="bm-ava" id="botAva"></span></span>
+      </div>
+      <span class="bm-spark s1">✦</span><span class="bm-spark s2">✦</span><span class="bm-spark s3">✦</span>
     </div>
-    <p class="bm-small">Uses the handle, platform and photo from the join form. It's shown with a small ✦ promoted tag. Buying again for the same profile adds another 30 days.</p>
+    <h2 id="botTitle">Become a bot</h2>
+    <p class="bm-sub">Your profile plays <b>24/7</b> for <b>30 days</b>.</p>
+    <ul class="bm-feats">
+      <li><span>🐍</span>Roams the arena</li>
+      <li><span>👑</span>Leads sometimes</li>
+      <li><span>💬</span>Chats a little</li>
+      <li><span>👀</span>Your @ seen all day</li>
+    </ul>
+    <div class="bm-card">
+      <div class="bm-who"><div class="bm-name" id="botName"></div><div class="bm-meta" id="botMeta"></div></div>
+      <div class="bm-price"><b>$5</b><small>30 days</small></div>
+    </div>
     <p id="botErr" role="alert" hidden></p>
-    <button class="cta" id="botPay">Continue to payment · $5</button>
-    <p class="bm-small">Secure checkout by Stripe. Your card details never touch plsfollow.me.</p>
+    <button class="cta" id="botPay">🔒 Pay $5 with Stripe</button>
+    <p class="bm-fine">✦ promoted tag · renew anytime · secure checkout</p>
   </div>
 </div>
 

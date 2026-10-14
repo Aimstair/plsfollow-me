@@ -1029,7 +1029,7 @@
   // ---------- Paid bot: your profile in the snake for 30 days ----------
   function openBotModal() {
     const handle = $('handle').value.trim().replace(/^@+/, '').replace(/\s+/g, ''), plat = $('platform').value;
-    $('botName').textContent = handle ? '@' + handle : 'Add your handle in the form first';
+    $('botName').textContent = handle ? '@' + handle + ' ✦' : 'Add your handle first';
     $('botMeta').innerHTML = iconSvg(plat, 14); $('botMeta').append(' ' + PLAT[plat]);
     const av = $('botAva'); av.textContent = photoB64 ? '' : handle ? handle[0].toUpperCase() : '?';
     av.style.backgroundImage = photoB64 ? `url("data:image/jpeg;base64,${photoB64}")` : '';
@@ -1042,7 +1042,7 @@
   $('botModal').addEventListener('click', e => { if (e.target.id === 'botModal') $('botModal').hidden = true; });
   $('botPay').addEventListener('click', async () => {
     const handle = $('handle').value.trim().replace(/^@+/, '').replace(/\s+/g, '');
-    const showErr = msg => { $('botErr').textContent = msg; $('botErr').hidden = false; $('botPay').disabled = false; $('botPay').textContent = 'Continue to payment · $5'; };
+    const showErr = msg => { $('botErr').textContent = msg; $('botErr').hidden = false; $('botPay').disabled = false; $('botPay').textContent = '🔒 Pay $5 with Stripe'; };
     if (!/^[A-Za-z0-9._-]{1,30}$/.test(handle)) return showErr('Add a valid handle in the join form first.');
     $('botPay').disabled = true; $('botPay').textContent = 'Opening checkout…';
     try {
