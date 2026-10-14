@@ -123,6 +123,8 @@ async function handleApi(req, res, url) {
 
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://local'), { pathname } = url;
+  // One address for search engines: www.plsfollow.me → plsfollow.me
+  if (/^www\./i.test(req.headers.host || '')) { res.writeHead(301, { Location: 'https://' + req.headers.host.replace(/^www\./i, '') + req.url }); res.end(); return; }
   if (pathname.startsWith('/api/') || pathname.startsWith('/admin/')) { handleApi(req, res, url).catch(() => json(res, 500, { error: 'server error' })); return; }
   if (pathname === '/healthz') {
     res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
