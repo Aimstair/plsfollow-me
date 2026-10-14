@@ -8,7 +8,7 @@ window.PFAudio = (() => {
   try { Object.assign(prefs, JSON.parse(localStorage.getItem('pf-audio') || '{}')); } catch { /* storage blocked */ }
   const save = () => { try { localStorage.setItem('pf-audio', JSON.stringify(prefs)); } catch { /* storage blocked */ } };
 
-  let ctx = null, master, musicBus, sfxBus, reverb, delay, padFilter, crackle = null, crackleGain = null, timer = 0, nextTime = 0, step = 0;
+  let ctx = null, out = null, master, musicBus, sfxBus, reverb, delay, padFilter, crackle = null, crackleGain = null, timer = 0, nextTime = 0, step = 0;
   let mode = 'lofi', intensity = 0, theme = 'algorithm'; // music mode: 'lofi', or 'boss' with intensity 0 (warning) / 1 (fight) / 2 (enraged)
   const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
   const rand = (a, b) => a + Math.random() * (b - a);
@@ -21,7 +21,7 @@ window.PFAudio = (() => {
     master = ctx.createGain(); master.gain.value = 0.9;
     master.connect(comp).connect(ctx.destination);
     musicBus = ctx.createGain(); musicBus.gain.value = 0; musicBus.connect(master);
-    sfxBus = ctx.createGain(); sfxBus.gain.value = prefs.sfx ? 0.55 : 0; sfxBus.connect(master);
+    sfxBus = ctx.createGain(); sfxBus.gain.value = prefs.sfx ? 0.55 : 0; sfxBus.connect(master); out = sfxBus;
 
     // Generated room reverb: stereo noise with an exponential tail
     reverb = ctx.createConvolver();
@@ -391,7 +391,7 @@ window.PFAudio = (() => {
     e.gain.setValueAtTime(0, t); e.gain.linearRampToValueAtTime(gain, t + attack); e.gain.exponentialRampToValueAtTime(0.0008, t + dur);
     let node = o;
     if (filter) { const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = filter; node = node.connect(f); }
-    node.connect(e).connect(sfxBus);
+    node.connect(e).connect(out);
     if (verb) { const v = ctx.createGain(); v.gain.value = verb; e.connect(v).connect(reverb); }
     o.start(t); o.stop(t + dur + 0.05);
   }
@@ -399,7 +399,14 @@ window.PFAudio = (() => {
     const s = noise(), f = ctx.createBiquadFilter(), e = ctx.createGain();
     f.type = 'bandpass'; f.Q.value = 1.4; f.frequency.setValueAtTime(from, t); f.frequency.exponentialRampToValueAtTime(to, t + dur);
     e.gain.setValueAtTime(0, t); e.gain.linearRampToValueAtTime(gain, t + dur * 0.3); e.gain.exponentialRampToValueAtTime(0.0008, t + dur);
-    s.connect(f).connect(e).connect(sfxBus); s.start(t, rand(0, 0.4)); s.stop(t + dur + 0.05);
+    s.connect(f).connect(e).connect(out); s.start(t, rand(0, 0.4)); s.stop(t + dur + 0.05);
+  }
+  // A short filtered noise hit (for crunches, thuds and poofs)
+  function crunch(t, { freq = 900, q = 1, len = 0.08, gain = 0.3, type = 'bandpass' } = {}) {
+    const s = noise(), f = ctx.createBiquadFilter(), e = ctx.createGain();
+    f.type = type; f.frequency.value = freq; f.Q.value = q;
+    e.gain.setValueAtTime(gain, t); e.gain.exponentialRampToValueAtTime(0.0008, t + len);
+    s.connect(f).connect(e).connect(out); s.start(t, rand(0, 0.5)); s.stop(t + len + 0.02);
   }
   const SFX = {
     join: t => { tone(mtof(72), t, { type: 'triangle', dur: 0.25, gain: 0.25 }); tone(mtof(79), t + 0.09, { type: 'triangle', dur: 0.4, gain: 0.25 }); },
@@ -474,6 +481,33 @@ window.PFAudio = (() => {
     dragonBlock: t => { tone(mtof(64), t, { type: 'square', dur: 0.1, gain: 0.1, filter: 2500 }); tone(mtof(76), t + 0.07, { type: 'triangle', dur: 0.25, gain: 0.15, verb: 0.3 }); tone(80, t, { dur: 0.35, gain: 0.35, to: 35 }); whoosh(t, 4000, 300, 0.25, 0.3); },
     dragonRoar: t => { for (const [f0, det] of [[55, 0], [58, 10], [82, -6], [110, 4]]) { const oo = ctx.createOscillator(), e = ctx.createGain(), fl = ctx.createBiquadFilter(), w = dist(), vib = ctx.createOscillator(), va = ctx.createGain(); oo.type = 'sawtooth'; oo.frequency.setValueAtTime(f0 * 1.3, t); oo.frequency.exponentialRampToValueAtTime(f0, t + 1.5); oo.detune.value = det; vib.frequency.value = 11; va.gain.value = 14; vib.connect(va).connect(oo.frequency); fl.type = 'lowpass'; fl.frequency.setValueAtTime(400, t); fl.frequency.linearRampToValueAtTime(2200, t + 0.4); fl.frequency.linearRampToValueAtTime(350, t + 1.6); e.gain.setValueAtTime(0, t); e.gain.linearRampToValueAtTime(0.09, t + 0.15); e.gain.exponentialRampToValueAtTime(0.001, t + 1.7); oo.connect(w).connect(fl).connect(e).connect(sfxBus); e.connect(reverb); oo.start(t); oo.stop(t + 1.75); vib.start(t); vib.stop(t + 1.75); } whoosh(t, 500, 1500, 1.3, 0.3); },
     dragonDown: t => { SFX.dragonRoar(t); tone(300, t + 0.5, { type: 'sawtooth', dur: 1.5, gain: 0.1, to: 40, filter: 1200 }); for (let i = 0; i < 10; i++) tone(rand(400, 900), t + 0.6 + i * 0.12, { type: 'square', dur: 0.06, gain: 0.03, filter: 2000 }); },
+    // ---------- Snakes touching each other ----------
+    // Stealing a tail: a quick swipe, then a "yoink" that climbs a note per person taken (up to 6)
+    yoink: (t, o) => {
+      whoosh(t, 700, 5200, 0.16, 0.5); crunch(t + 0.03, { freq: 2400, q: 2, len: 0.04, gain: 0.4 });
+      const n = Math.max(1, Math.min(6, o.n || 1));
+      for (let i = 0; i < n; i++) tone(mtof(72 + [0, 4, 7, 12, 16, 19][i]), t + 0.08 + i * 0.05, { type: 'triangle', dur: 0.16, gain: 0.26, verb: 0.15 });
+      tone(mtof(91), t + 0.1 + n * 0.05, { dur: 0.5, gain: 0.12, verb: 0.4 });
+    },
+    // Getting your tail stolen: a hard hit, then a sad slide down
+    robbed: t => { crunch(t, { freq: 500, q: 0.8, len: 0.14, gain: 0.45 }); tone(140, t, { dur: 0.3, gain: 0.35, to: 45, verb: 0 }); tone(mtof(70), t + 0.08, { type: 'sawtooth', dur: 0.55, gain: 0.1, to: mtof(55), filter: 1400, verb: 0.25 }); },
+    // Head-on crash: a metal clang plus a thud
+    clang: t => { for (const [m, g] of [[1, 0.16], [2.41, 0.1], [3.93, 0.07], [5.3, 0.04]]) tone(330 * m, t, { type: 'sine', dur: 0.7, gain: g, verb: 0.3 }); tone(120, t, { dur: 0.3, gain: 0.4, to: 40, verb: 0 }); crunch(t, { freq: 3000, q: 0.7, len: 0.06, gain: 0.3 }); },
+    // Two lone heads bumping: a cartoon boing
+    boing: t => {
+      const o = ctx.createOscillator(), e = ctx.createGain(), vib = ctx.createOscillator(), va = ctx.createGain();
+      o.type = 'sine'; o.frequency.setValueAtTime(420, t); o.frequency.exponentialRampToValueAtTime(160, t + 0.45);
+      vib.frequency.value = 16; va.gain.value = 40; vib.connect(va).connect(o.frequency);
+      e.gain.setValueAtTime(0.3, t); e.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+      o.connect(e).connect(out); o.start(t); o.stop(t + 0.52); vib.start(t); vib.stop(t + 0.52);
+      tone(90, t, { dur: 0.2, gain: 0.3, to: 45, verb: 0 });
+    },
+    // A snake biting itself: crunch-crunch
+    chomp: t => { for (const d of [0, 0.09]) { crunch(t + d, { freq: 700, q: 1.2, len: 0.07, gain: 0.4 }); tone(180, t + d, { dur: 0.08, gain: 0.25, to: 80, verb: 0 }); } },
+    // Someone who ran out of time gets swallowed into a tail: a gulp and a bubble
+    gulp: t => { tone(420, t, { dur: 0.22, gain: 0.3, to: 110, verb: 0 }); tone(mtof(84), t + 0.2, { type: 'sine', dur: 0.08, gain: 0.14, to: mtof(91) }); },
+    // A head knocked out of the game: poof
+    poof: t => { whoosh(t, 3000, 250, 0.45, 0.4); tone(110, t, { dur: 0.35, gain: 0.3, to: 40, verb: 0.2 }); },
     chat: t => { tone(780, t, { type: 'sine', dur: 0.09, gain: 0.12, to: 1150, verb: 0.1 }); },
     click: t => tone(900, t, { type: 'triangle', dur: 0.04, gain: 0.12, verb: 0 }),
   };
@@ -487,13 +521,25 @@ window.PFAudio = (() => {
       if (ctx.state !== 'running') ctx.resume();
       if (prefs.music) startMusic();
     },
-    play(name) {
+    play(name, opts) {
       if (!ctx || !prefs.sfx || ctx.state !== 'running' || !SFX[name]) return;
       // Don't stack the same sound when several events land in one frame
       const t = ctx.currentTime;
       if (lastPlayed[name] && t - lastPlayed[name] < 0.07) return;
       lastPlayed[name] = t;
-      SFX[name](t + 0.01);
+      SFX[name](t + 0.01, opts || {});
+    },
+    // Play a sound somewhere in the world: quieter and panned for things that happen away from you
+    playAt(name, gain = 1, pan = 0, opts) {
+      if (!ctx || !prefs.sfx || ctx.state !== 'running' || !SFX[name] || gain <= 0.02) return;
+      const t = ctx.currentTime, key = name + '@';
+      if (lastPlayed[key] && t - lastPlayed[key] < 0.09) return;
+      lastPlayed[key] = t;
+      const g = ctx.createGain(); g.gain.value = gain; let node = g;
+      if (ctx.createStereoPanner) { const p = ctx.createStereoPanner(); p.pan.value = Math.max(-1, Math.min(1, pan)); g.connect(p); node = p; }
+      node.connect(sfxBus);
+      out = g; try { SFX[name](t + 0.01, opts || {}); } finally { out = sfxBus; }
+      setTimeout(() => { try { node.disconnect(); } catch { /* already gone */ } }, 3000);
     },
     // Play a sound effect `delay` seconds from now (used to land boss sounds on the exact hit moment)
     at(name, delay, opts) {

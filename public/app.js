@@ -35,7 +35,13 @@
   const cv = document.getElementById('game'), ctx = cv.getContext('2d');
   const mini = document.getElementById('mini'), mctx = mini.getContext('2d');
   const $ = id => document.getElementById(id);
-  const sfx = name => window.PFAudio && PFAudio.play(name);
+  const sfx = (name, o) => window.PFAudio && PFAudio.play(name, o);
+  // Sounds for things happening to other snakes: quieter the farther from the camera, panned left/right
+  function sfxAt(name, x, y, o) {
+    if (!window.PFAudio || !W) return;
+    const dx = (x - cam.x) * cam.z / (W / 2), dy = (y - cam.y) * cam.z / (H / 2), d = Math.hypot(dx, dy);
+    if (d < 1.6) PFAudio.playAt(name, 0.5 * (1 - d / 1.6), dx * 0.8, o);
+  }
   let W = 0, H = 0, DPR = 1;
   function resize() { DPR = Math.min(2, window.devicePixelRatio || 1); W = innerWidth; H = innerHeight; cv.width = W * DPR; cv.height = H * DPR; }
   resize(); addEventListener('resize', resize);
@@ -246,21 +252,25 @@
       if (e.sid === me0.sid && me0.idx === 0) { toast('⚡ Speed boost! Go steal someone.', true); shake.a = 6; sfx('boost'); }
     } else if (e.k === 'bite') {
       burst(e.x, e.y, 30, ['#ffffff', '#cfe8ff', '#ffc93c'], { speed: 340, life: 700, size: 5 });
-      if (e.sid === me0.sid) { shake.a = 12; sfx('crash'); toast(me0.idx >= e.k2 ? '💥 The snake bit itself. You are in a new snake!' : `💥 The snake bit itself and lost ${e.n} people!`); }
+      if (e.sid !== me0.sid) sfxAt('chomp', e.x, e.y);
+      else { shake.a = 12; sfx('chomp'); toast(me0.idx >= e.k2 ? '💥 The snake bit itself. You are in a new snake!' : `💥 The snake bit itself and lost ${e.n} people!`); }
     } else if (e.k === 'steal') {
       burst(e.x, e.y, 30, ['#ff5fa2', '#ffc93c', '#fff'], { speed: 320, life: 750, size: 5 });
-      if (e.victim === me0.sid && me0.idx >= e.k2) { shake.a = 12; sfx('lost'); toast(`🫳 Another snake stole you (and ${e.n - 1} others)!`); }
-      else if (e.thief === me0.sid) { sfx('gain'); toast(`😈 Your snake stole ${e.n} people!`); }
-      else if (e.victim === me0.sid) { shake.a = 16; sfx('crash'); sfx('lost'); knockFx(e.hx, e.hy); toast(`😱 Your snake lost ${e.n} people to a thief!`); }
+      if (e.victim === me0.sid && me0.idx >= e.k2) { shake.a = 12; sfx('robbed'); toast(`🫳 Another snake stole you (and ${e.n - 1} others)!`); }
+      else if (e.thief === me0.sid) { sfx('yoink', { n: e.n }); toast(`😈 Your snake stole ${e.n} people!`); }
+      else if (e.victim === me0.sid) { shake.a = 16; sfx('robbed'); knockFx(e.hx, e.hy); toast(`😱 Your snake lost ${e.n} people to a thief!`); }
+      else sfxAt('yoink', e.x, e.y, { n: e.n });
       if (e.victim !== me0.sid) knockFx(e.hx, e.hy, true);
     } else if (e.k === 'clash') {
       burst(e.x, e.y, 34, ['#fb923c', '#ffc93c', '#fff'], { speed: 380, life: 700, size: 5 });
-      if (e.victim === myPid) { shake.a = 14; sfx('crash'); toast('🐍 Head-on crash! A bigger snake captured you.'); }
-      else if (e.win === me0.sid) { sfx('gain'); toast(`🥊 Head-on crash! Your snake captured ${name(e.victim)}`); }
-      else if (e.lose === me0.sid) { shake.a = 10; sfx('crash'); toast(`🥊 Your head ${name(e.victim)} got captured by a bigger snake!`); }
+      if (e.victim === myPid) { shake.a = 14; sfx('clang'); sfx('robbed'); toast('🐍 Head-on crash! A bigger snake captured you.'); }
+      else if (e.win === me0.sid) { sfx('clang'); sfx('yoink', { n: 1 }); toast(`🥊 Head-on crash! Your snake captured ${name(e.victim)}`); }
+      else if (e.lose === me0.sid) { shake.a = 10; sfx('clang'); toast(`🥊 Your head ${name(e.victim)} got captured by a bigger snake!`); }
+      else sfxAt('clang', e.x, e.y);
     } else if (e.k === 'troll') {
       burst(e.x, e.y, 28, ['#a855f7', '#f0abfc', '#ff5f7e'], { speed: 300, life: 650, size: 5 });
-      if (e.sid === me0.sid) {
+      if (e.sid !== me0.sid) sfxAt('troll', e.x, e.y);
+      else {
         shake.a = e.head === myPid ? 12 : 6; sfx('troll');
         toast(e.head === myPid ? `👹 A troll bumped you: −${e.ms / 1000}s of your turn!` : `👹 A troll bumped the head: −${e.ms / 1000}s. The race comes sooner!`);
       }
@@ -268,16 +278,20 @@
       if (window.PFBoss) PFBoss.onEvent(e, { pid: myPid, sid: me0.sid, idx: me0.idx });
     } else if (e.k === 'bump') {
       burst(e.x, e.y, 30, ['#ffc93c', '#ff5f7e', '#fff'], { speed: 340, life: 650, size: 5 });
-      if (e.a === myPid || e.b === myPid) { shake.a = 12; sfx('crash'); toast(`💥 Head bump with ${name(e.a === myPid ? e.b : e.a)}! −${e.ms / 1000}s for both of you`); }
+      if (e.a !== myPid && e.b !== myPid) sfxAt('boing', e.x, e.y);
+      else { shake.a = 12; sfx('boing'); toast(`💥 Head bump with ${name(e.a === myPid ? e.b : e.a)}! −${e.ms / 1000}s for both of you`); }
     } else if (e.k === 'absorb') {
       burst(e.x, e.y, 26, ['#ff5fa2', '#ffc93c', '#fff'], { speed: 300, life: 700, size: 5 });
-      if (e.victim === myPid) { shake.a = 10; sfx('lose'); toast(`⏱ Out of time! ${name(e.by)} bumped you, so you're in their tail now.`); }
-      else if (e.by === myPid) { sfx('gain'); toast(`🐍 ${name(e.victim)} ran out of time and joined your tail!`, true); }
+      if (e.victim === myPid) { shake.a = 10; sfx('gulp'); sfx('lose'); toast(`⏱ Out of time! ${name(e.by)} bumped you, so you're in their tail now.`); }
+      else if (e.by === myPid) { sfx('gulp'); sfx('gain'); toast(`🐍 ${name(e.victim)} ran out of time and joined your tail!`, true); }
+      else sfxAt('gulp', e.x, e.y);
     } else if (e.k === 'out') {
       burst(e.x, e.y, 46, ['#a855f7', '#f0abfc', '#ff5f7e', '#fff'], { speed: 420, life: 900, size: 6 });
+      if (e.pid !== myPid) sfxAt('poof', e.x, e.y);
     } else if (e.k === 'break') {
       burst(e.x, e.y, 34, ['#a855f7', '#f0abfc', '#fff'], { speed: 360, life: 750, size: 5 });
-      if (e.sid === me0.sid) { shake.a = 12; sfx('troll'); sfx('crash'); toast(me0.idx >= e.k2 ? "👹 A troll broke the snake. You're in a new snake now!" : `👹 A troll broke ${e.n} people off your snake!`); }
+      if (e.sid !== me0.sid) sfxAt('chomp', e.x, e.y);
+      else { shake.a = 12; sfx('troll'); sfx('chomp'); toast(me0.idx >= e.k2 ? "👹 A troll broke the snake. You're in a new snake now!" : `👹 A troll broke ${e.n} people off your snake!`); }
     } else if (e.k === 'turn') {
       const h = headPos(e.sid);
       if (h && e.head !== myPid) confetti(h.x, h.y, 22);
@@ -706,7 +720,8 @@
   function draw(dt) {
     const st = spectating && !mine ? specTarget() : null;
     const focusSnake = mine || (st && st.s) || (view.snakes.length ? biggest() : null);
-    const focus = st ? st.m : focusSnake ? focusSnake.members[0] : { x: 0, y: 0 };
+    const hold = spectating && !mine && !st && specKey === 'ace'; // watching FEATURED while they respawn
+    const focus = hold ? cam : st ? st.m : focusSnake ? focusSnake.members[0] : { x: 0, y: 0 };
     // Phones (either orientation) zoom in a bit more so faces read; desktop is unchanged
     const zTarget = Math.max(Math.min(W, H), Math.max(W, H) * 0.6) / (me || spectating ? 860 : 1150);
     // Frame-rate independent easing, so 60 Hz and 120 Hz screens feel the same
@@ -916,8 +931,10 @@
       $('spotOpensN').textContent = spot ? spot.opens : 0;
 
     } else if (online) st.hidden = true;
+    // Each snake is named after its head; long handles are cut short (the CSS also ellipsizes as a backstop)
+    const boardName = sn => { const hd = handleOf(sn.members[0].pid); if (!hd) return 'anonymous'; const t = hd.length > 15 ? hd.slice(0, 14) + '…' : hd; return '@' + t.replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`); };
     const top = view.snakes.slice().sort((a, b) => b.members.length - a.members.length).slice(0, 5), max = top.length ? top[0].members.length : 1;
-    $('boardList').innerHTML = top.map(s => { const c = s === mine ? '#ff5fa2' : `hsl(${snakeHue(s.id)},60%,62%)`; return `<li class="${s === mine ? 'mine' : ''}" style="--c:${c}"><span class="orb"></span><span>${s === mine ? 'Your snake' : 'Snake ' + s.id}</span><span class="n">${s.members.length}</span><span class="bar"><i style="width:${Math.round(s.members.length / max * 100)}%"></i></span></li>`; }).join('');
+    $('boardList').innerHTML = top.map(s => { const c = s === mine ? '#ff5fa2' : `hsl(${snakeHue(s.id)},60%,62%)`; return `<li class="${s === mine ? 'mine' : ''}" style="--c:${c}"><span class="orb"></span><span class="who">${s === mine ? 'Your snake' : boardName(s)}</span><span class="n">${s.members.length}</span><span class="bar"><i style="width:${Math.round(s.members.length / max * 100)}%"></i></span></li>`; }).join('');
     $('introNote').textContent = humans ? 'Live right now. Jump in!' : "Nobody's here yet. Join now and you lead first.";
   }
 
@@ -983,30 +1000,33 @@
 
   // ---------- Spectate ----------
   // Watch without joining: the camera follows one snake's head; ‹ › (or ← →) switch snakes, biggest first.
-  // FEATURED gets their own stop right after the snake they're in, even when they're not its head.
+  // FEATURED gets their own stop right after the snake they're in, even when they're not its head, and once
+  // you're watching them the camera stays on them (head, tail or respawning) until you press ‹ or ›.
   const FEATURED = 'ericmar.g';
   let spectating = false, specKey = 0;
   function specTargets() {
     if (!view) return [];
     let ace = null;
     for (const s of view.snakes) { const i = s.members.findIndex(m => handleOf(m.pid) === FEATURED); if (i >= 0) { ace = { key: 'ace', s, m: s.members[i], idx: i }; break; } }
-    const list = view.snakes.slice().sort((a, b) => b.members.length - a.members.length).map(s => ({ key: s.id, s, m: s.members[0] }));
+    const list = view.snakes.slice().sort((a, b) => b.members.length - a.members.length).map(s => (ace && ace.s === s && ace.idx === 0 ? ace : { key: s.id, s, m: s.members[0] }));
     if (ace && ace.idx > 0) list.splice(list.findIndex(t => t.s === ace.s) + 1, 0, ace);
     return list;
   }
   function specTarget() {
     const list = specTargets(); if (!list.length) return null;
-    return list.find(t => t.key === specKey) || (specKey === 'ace' && list.find(t => handleOf(t.m.pid) === FEATURED)) || list.find(t => t.key !== 'ace') || list[0];
+    const t = list.find(x => x.key === specKey);
+    if (t || specKey === 'ace') return t || null; // FEATURED is respawning: hold the camera, don't switch
+    return list.find(x => x.key !== 'ace') || list[0];
   }
   function specStep(dir) {
     const list = specTargets(); if (!list.length) return;
-    const cur = specTarget(), i = Math.max(0, list.findIndex(t => cur && t.key === cur.key));
+    const cur = specTarget(), i = cur ? Math.max(0, list.findIndex(t => t.key === cur.key)) : dir > 0 ? -1 : 0;
     specKey = list[(i + dir + list.length) % list.length].key;
     sfx('click'); specRender(true);
   }
   function startSpectate() {
     if (window.PFAudio) PFAudio.unlock();
-    spectating = true; const t = specTargets().find(x => x.key !== 'ace') || specTarget(); specKey = t ? t.key : 0;
+    spectating = true; const t = specTargets()[0]; specKey = t ? t.key : 0;
     $('intro').hidden = true; $('spec').hidden = false; specRender(true);
   }
   function stopSpectate(toMenu = true) {
@@ -1017,8 +1037,8 @@
   function specRender(force) {
     if (!spectating || (!force && now - specAt < 200)) return; specAt = now;
     const list = specTargets(), t = specTarget();
-    if (!t) { $('specName').textContent = 'Nobody here yet'; $('specMeta').textContent = ''; $('specFollow').hidden = true; return; }
-    if (specKey !== 'ace' || handleOf(t.m.pid) !== FEATURED) specKey = t.key; // keep watching them if they become a head
+    if (!t) { $('specName').textContent = specKey === 'ace' ? '@' + FEATURED : 'Nobody here yet'; $('specMeta').textContent = specKey === 'ace' ? 'Respawning… back in a few seconds' : ''; $('specFollow').hidden = true; return; }
+    specKey = t.key;
     const s = t.s, h = t.m.pid, hd = handleOf(h), url = photoUrl(h), head = s.members[0].pid;
     const where = t.key === 'ace' && t.idx > 0 ? `#${t.idx + 1} in ${handleOf(head) ? '@' + handleOf(head) : 'a'}'s snake of ${s.members.length}` : `snake of ${s.members.length}`;
     $('specName').textContent = hd ? '@' + hd : 'anonymous';
