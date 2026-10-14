@@ -14,9 +14,9 @@ const CFG = {
   SOLO_MS: 30000, BUMP_COST_MS: 5000, // a head with no tail has 30s to get one; head bumps between two of them cost 5s each
   GRACE_MS: 1500, STEAL_GRACE_MS: 800,
   BOOST_MS: 3000, BOOST: 1.6, BOLT_HIT: 32,
-  // Eight trolls wander the map at random, keeping apart. Head bump: the leader loses time.
+  // Ten trolls wander the map at random, keeping apart. Head bump: the leader loses time.
   // Body hit: the snake breaks. A head with no tail gets knocked out.
-  TROLL_COUNT: 8, TROLL_APART: 0.45, // keep at least this fraction of the arena radius between trolls
+  TROLL_COUNT: 10, TROLL_APART: 0.4, // keep at least this fraction of the arena radius between trolls
   CHAT_MAX: 80, CHAT_GAP_MS: 1200,
   TROLL_SPEED: 90, TROLL_TURN: 2,
   TROLL_HEAD_HIT: 36, TROLL_BODY_HIT: 31, TROLL_COOL_MS: 4000, TROLL_TIME_COST_MS: 5000,

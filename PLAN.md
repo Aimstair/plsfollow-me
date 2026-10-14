@@ -26,7 +26,7 @@ right away, and produce moments worth screenshotting and sharing.
 | Arena | A circle whose radius grows with player count (`700 + 30·√N`). Heads slide along the wall. |
 | Hosts | The site's own accounts (@ericmar.g on Threads; @maisoncarte_official + @clipit_app on TikTok, sharing a snake) are played by the server: they roam, chase boosts, dodge trolls, steal, and sometimes fight each other. Tagged ✦ host, counted as online, kept off the hall of fame, handles reserved. Knocked out → back in 8s. |
 | Join | 10% of new players start as a lone head instead of joining the biggest snake's tail. |
-| Trolls | Every snake segment is a real person. Eight purple 👹 trolls wander the map at random, keeping far apart from each other. They don't chase anyone. A troll touching a head costs that leader 5 seconds of their turn. A troll touching a body breaks the snake there, and everyone behind becomes a new snake. After a hit a troll is harmless for 4s. A head with no tail that touches a troll is knocked out. |
+| Trolls | Every snake segment is a real person. Ten purple 👹 trolls wander the map at random, keeping far apart from each other. They don't chase anyone. A troll touching a head costs that leader 5 seconds of their turn. A troll touching a body breaks the snake there, and everyone behind becomes a new snake. After a hit a troll is harmless for 4s. A head with no tail that touches a troll is knocked out. |
 
 **What a new visitor sees:** if nobody else is playing, they start their own snake and lead it
 immediately. Otherwise they join the tail of the biggest snake and can win the next race, which starts in at most 20s.

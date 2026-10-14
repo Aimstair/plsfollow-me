@@ -333,7 +333,7 @@
   addEventListener('keydown', e => {
     if (typing(e)) return;
     keys[e.key] = true;
-    if (race && !$('duel').hidden && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); if (!e.repeat) padPress(); return; }
+    if (race && !$('duel').hidden && e.key === ' ') { e.preventDefault(); if (!e.repeat) padPress(); return; } // space taps; Enter is for chat
     if (e.key === 'Enter' && myPid && $('intro').hidden && $('shareModal').hidden) { e.preventDefault(); openChat(); }
   });
   addEventListener('keyup', e => { keys[e.key] = false; });
