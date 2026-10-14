@@ -355,51 +355,41 @@
   }, 50);
 
   // ---------- Tap race for next head ----------
-  // In the leader's last 10 seconds, everyone who was in the snake when it opened taps as fast as they
-  // can. Most taps when the timer runs out leads next. Taps go to the server in small batches.
+  // Everyone behind the head taps anywhere on screen for the whole turn; most taps when the timer runs
+  // out leads next. There's no card: your count shows in the status line, with +1s where you tap.
   let race = null, raceTop = null, tapTimer = 0;
-  const hiddenRace = new Set(); // races whose pop-up we closed (still racing via the race bar)
   let myEntry = null; // we tapped in the current turn's race (for the "you lost" sound)
   const keyOf = (sid, turn) => `${sid}:${turn}`;
   const raceOn = s => s.members.length > 1;     // the tap race runs the whole turn
   const lastStretch = s => s.left <= RACE_MS;   // final seconds: the head's timer ring flashes
   function openRace(s) {
     const key = keyOf(s.id, s.turn);
-    hiddenRace.delete(key);
     if (!race || race.key !== key) {
       race = { key, sid: s.id, turn: s.turn, count: 0, unsent: 0, wasFirst: false };
-      $('duelResult').textContent = 'Go go go!';
-      const pad = $('pad'); pad.className = 'go'; pad.textContent = 'TAP!'; pad.disabled = false;
-      sfx('go');
       clearInterval(tapTimer); tapTimer = setInterval(flushTaps, 150);
     }
-    $('duelHint').textContent = 'Tap anywhere, as fast as you can! Most taps when the timer runs out leads next.';
-    $('duel').hidden = false; $('pad').focus();
+    $('duel').hidden = false;
   }
   function padPress(x, y) {
     if (!race) return;
     race.count++; race.unsent++;
-    const pad = $('pad'); pad.textContent = race.count;
-    pad.classList.remove('bump'); void pad.offsetWidth; pad.classList.add('bump');
     if (window.PFAudio) PFAudio.tap(race.count);
     myEntry = { sid: race.sid };
-    // "+1" and a ripple where the finger landed (or on the counter, for keyboard taps)
-    if (x == null) { const r = pad.getBoundingClientRect(); x = r.left + r.width / 2; y = r.top + r.height * .3; }
+    hudAt = 0; // refresh the status line right away
+    const st = $('status'); st.classList.remove('bump'); void st.offsetWidth; st.classList.add('bump');
+    // "+1" and a ripple where the finger landed (or at screen center for keyboard taps)
+    if (x == null) { x = W / 2; y = H * .4; }
     const layer = $('tapfx');
     while (layer.childElementCount > 40) layer.firstChild.remove();
     const ring = document.createElement('i'); ring.className = 'ring'; ring.style.left = x + 'px'; ring.style.top = y + 'px';
-    const plus = document.createElement('b'); plus.textContent = '+1'; plus.style.left = x + (Math.random() * 24 - 12) + 'px'; plus.style.top = y + 'px';
+    const plus = document.createElement('b'); plus.textContent = race.count % 10 === 0 ? `${race.count}!` : '+1';
+    plus.style.left = x + (Math.random() * 24 - 12) + 'px'; plus.style.top = y + 'px';
     plus.style.setProperty('--h', `${(race.count * 23) % 360}`);
     layer.append(ring, plus);
     setTimeout(() => { ring.remove(); plus.remove(); }, 700);
-    if (race.count % 10 === 0) { pad.classList.remove('combo'); void pad.offsetWidth; pad.classList.add('combo'); }
   }
-  // During the race the whole screen is the button
-  $('duel').addEventListener('pointerdown', e => {
-    if (e.target.closest('#duelClose')) return;
-    e.preventDefault(); padPress(e.clientX, e.clientY);
-  });
-  $('duelClose').addEventListener('click', () => { if (race) { hiddenRace.add(race.key); flushTaps(); } $('duel').hidden = true; });
+  // During the race the whole screen (except the HUD's buttons) is the button
+  $('duel').addEventListener('pointerdown', e => { e.preventDefault(); padPress(e.clientX, e.clientY); });
   function flushTaps() {
     if (race && race.unsent) { send({ t: 'taps', sid: race.sid, turn: race.turn, n: race.unsent }); race.unsent = 0; }
   }
@@ -407,10 +397,9 @@
     raceTop = m;
     if (typeof m.mine === 'number') stats.best = Math.max(stats.best, m.mine);
     if (!race || keyOf(m.sid, m.turn) !== race.key) return;
-    const first = m.top[0], mineN = typeof m.mine === 'number' ? m.mine : 0, amFirst = first && first[0] === myPid;
+    const first = m.top[0], amFirst = first && first[0] === myPid;
     if (amFirst && !race.wasFirst) sfx('win');
     race.wasFirst = amFirst;
-    $('duelResult').textContent = amFirst ? `👑 You're in first with ${first[1]} taps!` : first ? `You: ${mineN} · 1st: ${name(first[0])} with ${first[1]}` : 'Go go go!';
   }
   function onTapResult() {}
   function closeRace() { flushTaps(); clearInterval(tapTimer); $('duel').hidden = true; race = null; }
@@ -845,8 +834,7 @@
   function raceCheck() {
     if (race && (!mine || myIdx === 0 || keyOf(mine.id, mine.turn) !== race.key || !raceOn(mine))) closeRace();
     const k = mine && keyOf(mine.id, mine.turn);
-    if (me && myIdx > 0 && raceOn(mine) && mine.left > 300 && !race && !hiddenRace.has(k)) openRace(mine);
-    if (race) $('duelTime').textContent = fmt(mine.left);
+    if (me && myIdx > 0 && raceOn(mine) && mine.left > 300 && !race) openRace(mine);
   }
 
   // ---------- HUD ----------
@@ -856,6 +844,8 @@
     if (now - hudAt < 120) return; hudAt = now;
     const online = ws && ws.readyState === 1;
     $('chatBtn').hidden = !myPid;
+    $('share').hidden = !mine;
+    $('share').classList.toggle('ingame', $('intro').hidden);
     refreshLive();
     $('audioCtl').classList.toggle('ingame', $('intro').hidden);
     $('donate').classList.toggle('ingame', $('intro').hidden);
@@ -871,25 +861,25 @@
     const ranked = raceTop && mine && raceTop.sid === mine.id && raceTop.turn === mine.turn ? raceTop.top : [];
     if (mine && online) {
       st.hidden = false;
-      const left = mine.left, head = mine.members[0], live = raceOn(mine), key = keyOf(mine.id, mine.turn);
-      if (myIdx === 0) {
-        st.className = 'glass lead';
-        const alone = view.snakes.length < 2;
-        st.textContent = mine.members.length > 1 ? (lastStretch(mine) ? `👑 Your followers are tapping for your spot · ${fmt(left)}` : `👑 You're the head · ${fmt(left)} · grab ⚡ to go faster`)
-          : alone ? "👑 You're the only one here. Your 30s timer starts when someone else joins."
-          : `⏱ Get a tail in ${fmt(left)} or it's game over! Hit a snake's body to steal people.`;
-        st.classList.toggle('urgent', mine.members.length === 1 && !alone && left <= RACE_MS);
-      } else {
-        st.className = 'glass';
-        st.textContent = ranked[0] && ranked[0][0] === myPid ? `🔥 You're winning the tap race. You lead in ${fmt(left)}`
-          : `You're #${myIdx + 1} of ${mine.members.length} · tap race · new leader in ${fmt(left)}`;
+      const left = mine.left, head = mine.members[0];
+      // One compact line: crown + timer, then what's going on
+      const alone = view.snakes.length < 2, lone = mine.members.length === 1;
+      let text;
+      if (lone) text = alone ? '⏸ Timer paused · nobody else here' : `⏱ <tc>${fmt(left)}</tc> · Get a tail!`;
+      else if (myIdx === 0) text = `👑 <tc>${fmt(left)}</tc> · Tap race`;
+      else {
+        const mineN = Math.max(race ? race.count : 0, raceTop && raceTop.mine || 0), first = ranked[0];
+        text = `👑 <tc>${fmt(left)}</tc> · Tap race · ` + (first && first[0] === myPid ? `You're 1st · ${mineN}` : `You ${mineN}${first ? ` · 1st ${first[1]}` : ''}`);
       }
+      st.className = myIdx === 0 ? 'glass lead' : 'glass';
+      st.classList.toggle('urgent', lone && !alone && left <= RACE_MS);
+      // Build from fixed pieces (timer markup) and plain text only
+      st.textContent = '';
+      text.split(/<tc>|<\/tc>/).forEach((part, i) => { if (i % 2) { const b = document.createElement('b'); b.className = 'tc'; b.textContent = part; st.append(b); } else st.append(part); });
 
       const sp = $('spot');
       if (head.pid !== lastHeadPid) { lastHeadPid = head.pid; sp.classList.remove('flash'); void sp.offsetWidth; sp.classList.add('flash'); }
       sp.classList.toggle('me', myIdx === 0);
-      $('spotTag').textContent = myIdx === 0 ? "You're in the spotlight" : 'Now leading';
-      $('spotTime').textContent = fmt(left);
       $('spotProg').style.strokeDashoffset = (182.2 * (1 - Math.max(0, left) / LEAD_MS)).toFixed(1);
       const hd = handleOf(head.pid), url = photoUrl(head.pid);
       $('spotAva').textContent = url ? '' : hd ? hd[0].toUpperCase() : '?';
@@ -904,23 +894,6 @@
       $('spotOpens').hidden = !(myIdx === 0 && hd);
       $('spotOpensN').textContent = spot ? spot.opens : 0;
 
-      $('race').classList.toggle('live', live && lastStretch(mine));
-      const lone = mine.members.length === 1;
-      $('raceCloses').textContent = lone ? (view.snakes.length < 2 ? '⏸ Timer paused: nobody else here yet' : `⏱ ${fmt(left)} to get a tail`) : `👆 Tap race · new leader in ${fmt(left)}`;
-      const list = $('raceList'); list.textContent = '';
-      if (live && ranked.length) for (let i = 0; i < 3; i++) {
-        const e = ranked[i], li = document.createElement('li');
-        li.className = !e ? 'slot' : e[0] === myPid ? 'mine' : i === 0 ? 'first' : '';
-        const top = document.createElement('span'); top.className = 'pos'; top.textContent = i === 0 ? '👑 1st' : i === 1 ? '2nd' : '3rd';
-        const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = e ? name(e[0]) : '—';
-        const ms = document.createElement('span'); ms.className = 'ms'; ms.textContent = e ? `${e[1]} taps` : '';
-        li.append(top, nm, ms); list.append(li);
-      } else {
-        const li = document.createElement('li'); li.className = 'empty';
-        li.textContent = mine.members.length === 1 ? 'Hit another snake’s body to steal its people. Head bumps with other lone heads cost you both 5s.'
-          : myIdx === 0 ? 'Your followers are tapping for your spot…' : 'Tap anywhere! Most taps when the timer ends leads next.';
-        list.append(li);
-      }
     } else if (online) st.hidden = true;
     const top = view.snakes.slice().sort((a, b) => b.members.length - a.members.length).slice(0, 5), max = top.length ? top[0].members.length : 1;
     $('boardList').innerHTML = top.map(s => { const c = s === mine ? '#ff5fa2' : `hsl(${snakeHue(s.id)},60%,62%)`; return `<li class="${s === mine ? 'mine' : ''}" style="--c:${c}"><span class="orb"></span><span>${s === mine ? 'Your snake' : 'Snake ' + s.id}</span><span class="n">${s.members.length}</span><span class="bar"><i style="width:${Math.round(s.members.length / max * 100)}%"></i></span></li>`; }).join('');
@@ -1072,11 +1045,6 @@
     greetPending = false;
     if (myIdx > 0) toast(`You joined at the tail. You're #${myIdx + 1}. Tap to be the next head!`);
   }
-  $('race').addEventListener('click', e => {
-    if (e.target.closest('#share')) return;
-    if (!mine || myIdx === 0 || !raceOn(mine)) return;
-    openRace(mine);
-  });
 
   // ---------- Share card ----------
   function makeCaption(s) {
