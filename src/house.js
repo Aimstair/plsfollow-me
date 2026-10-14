@@ -19,6 +19,11 @@ const GROUPS = [
   [{ handle: 'oh.reocheesecake', platform: 'ig', roam: true }],
   [{ handle: 'numb_yb', platform: 'ig', roam: true }],
   [{ handle: 'monica.autolegitdealer', platform: 'ig', roam: true }],
+  [{ handle: '_chashhhhh', platform: 'ig', roam: true }],
+  [{ handle: 'izme_yu', platform: 'ig', roam: true }],
+  [{ handle: 'michaelleoness', platform: 'ig', roam: true }],
+  [{ handle: 'just.armyl', platform: 'ig', roam: true }],
+  [{ handle: 'seanothelast', platform: 'ig', roam: true }],
 ];
 
 // Chat lines by situation. Plain game chatter; nothing claims to have viewed or followed anyone.
