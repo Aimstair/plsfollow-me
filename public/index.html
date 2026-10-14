@@ -340,6 +340,13 @@ select option { color: #0b1220; background: #fff; }
 #photoRow #photo { flex: 1; min-width: 0; }
 #photoPrev { width: 46px; height: 46px; border-radius: 50%; object-fit: cover; flex: none; box-shadow: 0 0 0 2px var(--you); }
 #clearPhoto { flex: none; }
+#gameOver { position: fixed; inset: 0; z-index: 6; display: grid; place-content: center; justify-items: center; gap: 10px; text-align: center; pointer-events: none; background: radial-gradient(ellipse at center, rgba(7, 13, 24, .2), rgba(7, 13, 24, .75) 70%); animation: overIn .35s cubic-bezier(.2, 1.4, .4, 1); transition: opacity .6s ease-in; }
+#gameOver[hidden] { display: none; }
+#gameOver.out { opacity: 0; }
+#gameOver h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: clamp(48px, 12vw, 96px); line-height: .9; color: #ff8fa3; text-shadow: 0 4px 0 rgba(0,0,0,.35), 0 10px 50px rgba(244, 63, 94, .35); }
+#gameOver p { margin: 0; font-weight: 800; font-size: 16px; text-shadow: 0 1px 2px rgba(0,0,0,.9); }
+@keyframes overIn { from { opacity: 0; transform: scale(.85); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { #gameOver { animation: none; } }
 #joinErr { margin: 0; color: #ff8fa3; font-weight: 700; font-size: 14px; }
 #status.lead.urgent { background: linear-gradient(180deg, #ff8a9e, #f43f5e); color: #2a0610; animation: urgent .6s ease-in-out infinite alternate; }
 @keyframes urgent { to { transform: scale(1.04); box-shadow: 0 8px 30px rgba(244,63,94,.55); } }
@@ -363,6 +370,8 @@ select option { color: #0b1220; background: #fff; }
 </div>
 
 <div class="hud" id="toasts" aria-live="polite"></div>
+
+<div id="gameOver" role="alert" hidden><h2>Game over</h2><p id="gameOverWhy"></p></div>
 
 <div class="hud" id="bottom" hidden>
   <section class="spot" id="spot" aria-label="Now leading">

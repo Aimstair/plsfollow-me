@@ -426,9 +426,14 @@ class Game {
     const p = c.player; if (!p) return;
     const s = this.snakeOf(p);
     if (!s || s.members[0] === p || s.id !== m.sid || s.turn !== m.turn) return;
-    const r = s.race;
     const n = Math.floor(Number(m.n));
     if (!Number.isFinite(n) || n < 1) return;
+    this.addTaps(p, s, n);
+  }
+
+  // Count taps for a racer, within what a human hand could do (a refilling budget of TAP_RATE/s)
+  addTaps(p, s, n) {
+    const r = s.race;
     let e = r.entries.get(p.pid);
     if (!e) { e = { p, n: 0, at: 0, budget: CFG.TAP_BURST, last: this.now }; r.entries.set(p.pid, e); }
     e.budget = Math.min(CFG.TAP_BURST, e.budget + (this.now - e.last) / 1000 * CFG.TAP_RATE); e.last = this.now;
@@ -555,6 +560,7 @@ class Game {
     else { const at = this.safeSpot(); this.spawnLine([p], at.x, at.y, Math.atan2(-at.y, -at.x)); }
     p.lastSteer = this.now; // a fresh head keeps going straight until the first steering message
     this.send(c, { t: 'you', pid: p.pid });
+    this.house.onJoin(p, this.snakeOf(p));
     this.broadcastJson({ t: 'prof', l: [this.profileRow(p)] });
   }
 
@@ -599,7 +605,7 @@ class Game {
   profileRow(p) { return [p.pid, p.handle, p.platform, p.img ? 1 : 0, p.bot ? 1 : 0]; }
   avatarOf(pid) { const p = this.players.get(pid); return p && p.img; }
 
-  event(e) { this.events.push(e); }
+  event(e) { this.events.push(e); if (this.house) this.house.onEvent(e); }
 
   send(c, obj) { this.sendRaw(c, JSON.stringify(obj)); }
   sendRaw(c, str) { if (c.ws.readyState === OPEN) c.ws.send(str); }

@@ -1021,17 +1021,26 @@
     joinInfo = { handle, platform: $('platform').value, img: photoB64, follow: $('friend').value.trim() };
     send({ t: 'join', ...joinInfo });
   });
-  // A troll caught a head with no tail: back to the main screen, form still filled in for a quick rejoin
+  // A troll caught a head with no tail: flash "Game over" over the arena, fade it, then back to the
+  // main screen with the form still filled in for a quick rejoin
+  const OVER_HOLD_MS = 1800, OVER_FADE_MS = 600;
+  let overTimer = 0;
   function knockedOut(why) {
     if (spot) { stats.opens += spot.opens; spot = null; }
     myPid = 0; me = mine = null; joinInfo = null; closeRace();
     shake.a = 16; sfx('out'); if (window.PFAudio) PFAudio.duck(3); closeChat();
     $('bottom').hidden = true; $('peek').hidden = true; $('shareModal').hidden = true;
-    $('intro').hidden = false; $('joinBtn').disabled = false;
-    $('joinErr').textContent = why === 'time'
-      ? "⏱ Time's up! You didn't get a tail in 30 seconds. Jump back in?"
-      : '👹 A troll got you! Without a tail to protect you, one bump knocks you out. Jump back in?';
-    $('joinErr').hidden = false;
+    $('joinErr').hidden = true;
+    $('gameOverWhy').textContent = why === 'time' ? "⏱ Time's up" : '👹 A troll got you';
+    const over = $('gameOver');
+    clearTimeout(overTimer); over.classList.remove('out'); over.hidden = false;
+    overTimer = setTimeout(() => {
+      over.classList.add('out');
+      overTimer = setTimeout(() => {
+        over.hidden = true; over.classList.remove('out');
+        $('intro').hidden = false; $('joinBtn').disabled = false;
+      }, OVER_FADE_MS);
+    }, OVER_HOLD_MS);
   }
   let greetPending = false;
   function onJoined() {
