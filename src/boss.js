@@ -498,6 +498,40 @@ class Boss {
     }
     return null;
   }
+  // For the ace host (`allow`: a token on the dragon it's going for, so that body segment isn't avoided): of 36 headings, the one closest to `want` whose path stays clear of every attack,
+  // the boss body and minions over the next ~1.2s (or null when the current path is already safe)
+  safeHeading(h, want, speed, allow = null) {
+    if (!this.present) return null;
+    const g = this.g, now = g.now, real = g.now, T = [0.1, 0.25, 0.45, 0.7, 1, 1.35, 1.7];
+    const flash = this.attacks.find(a => a.type === 'flash' && now < a.t1 + 100);
+    const risk = ang => {
+      let bad = 0;
+      if (flash && angDiff(ang, Math.atan2(-h.y, -h.x)) < (flash.cone || 1.2) + 0.5) bad += 5;
+      for (let i = 0; i < T.length; i++) {
+        const x = h.x + Math.cos(ang) * speed * T[i], y = h.y + Math.sin(ang) * speed * T[i], w = T.length - i;
+        if (Math.hypot(x, y) > g.arenaR * 0.97) bad += w;
+        if (this.dragon) {
+          const dh = this.dragon.segs[0], dx = dh.x + Math.cos(this.dragon.angle) * B.DRAGON_SPEED * T[i], dy = dh.y + Math.sin(this.dragon.angle) * B.DRAGON_SPEED * T[i];
+          if (Math.hypot(x - dx, y - dy) < B.DRAGON_HEAD_R + 90) bad += w * 4;
+        }
+        for (const m of this.minions) { const mx = m.x + (h.x - m.x) * Math.min(1, T[i] * 0.5), my = m.y + (h.y - m.y) * Math.min(1, T[i] * 0.5); if (Math.hypot(x - mx, y - my) < 90) bad += w * 2; }
+        if (this.dragon) { for (const sg of this.dragon.segs) if (Math.hypot(x - sg.x, y - sg.y) < 110 && !(allow && Math.hypot(allow.x - sg.x, allow.y - sg.y) < 60)) { bad += w * 4; break; } }
+        else if (Math.hypot(x, y) < (this.kind === 'influencer' ? 110 : B.BODY_R) + 100) bad += w * 4;
+        for (const m of this.minions) if (Math.hypot(x - m.x, y - m.y) < 100) bad += w * 2;
+        g.now = now + T[i] * 1000;
+        for (const a of this.attacks) if (a.t2 >= g.now && a.t1 <= g.now && a.type !== 'flash' && this.hits(a, x, y, 60) || this.hits(a, x, y, 60, false)) bad += w * 3;
+        g.now = real;
+      }
+      return bad;
+    };
+    if (!risk(want) && !risk(h.angle)) return null;
+    let best = want, bestScore = Infinity;
+    for (let i = 0; i < 36; i++) {
+      const ang = want + (i % 2 ? 1 : -1) * Math.ceil(i / 2) * TAU / 36, sc = risk(ang) * 10 + angDiff(ang, want);
+      if (sc < bestScore) { bestScore = sc; best = ang; }
+    }
+    return best;
+  }
   // Token positions bots can aim for
   tokenSpots() { return this.tokens.map(t => this.tokenPos(t)); }
 }

@@ -10,7 +10,7 @@ const path = require('path');
 // the race and move from snake to snake, instead of keeping a home snake.
 // A profile photo for a host goes in public/hosts/<handle>.jpg (square JPEG).
 const GROUPS = [
-  [{ handle: 'ericmar.g', platform: 'th' }],
+  [{ handle: 'ericmar.g', platform: 'th', ace: true }], // the ace: faster, sharper and greedier than everyone (see aceSteer)
   [{ handle: 'maisoncarte_official', platform: 'tt' }, { handle: 'clipit_app', platform: 'tt' }],
   [{ handle: 'quizwizard-aim', platform: 'yt', roam: true }],
   [{ handle: 'vhokun_', platform: 'ig', roam: true }],
@@ -52,7 +52,8 @@ const CHAT_GAP_MS = [5000, 11000];    // at most one host chat in this window, a
 const CHAT_PERSONAL_MS = [35000, 80000]; // each host waits at least this long between their own chats
 
 const RESPAWN_MS = 8000;      // back in the game this long after being knocked out
-const AWAY_MS = 45000;        // a host stuck in another host's snake leaves after this, then respawns home
+const AWAY_MS = 45000;
+const ACE_AWAY_MS = 15000;    // the ace doesn't sit in someone else's tail for long        // a host stuck in another host's snake leaves after this, then respawns home
 const TAU = Math.PI * 2;
 const rand = (a, b) => a + Math.random() * (b - a);
 
@@ -109,14 +110,14 @@ class House {
         const lead = s && s.members[0], away = !slot.roam && lead && lead.bot && lead.group !== slot.group;
         if (!away) q.awaySince = 0;
         else if (!q.awaySince) q.awaySince = g.now;
-        else if (g.now - q.awaySince > AWAY_MS) { g.event({ k: 'out', pid: q.pid, x: Math.round(q.x), y: Math.round(q.y) }); g.eliminate(q, 'leave'); slot.player = null; slot.deadUntil = g.now + RESPAWN_MS; }
+        else if (g.now - q.awaySince > (q.ace ? ACE_AWAY_MS : AWAY_MS)) { g.event({ k: 'out', pid: q.pid, x: Math.round(q.x), y: Math.round(q.y) }); g.eliminate(q, 'leave'); slot.player = null; slot.deadUntil = g.now + RESPAWN_MS; }
       }
     }
   }
 
   spawn(slot) {
     const g = this.g;
-    const p = { pid: g.pidSeq++, bot: true, promo: !!slot.promo, group: slot.group, handle: slot.handle, platform: slot.platform, img: slot.img, client: null,
+    const p = { pid: g.pidSeq++, bot: true, ace: !!slot.ace, promo: !!slot.promo, group: slot.group, handle: slot.handle, platform: slot.platform, img: slot.img, client: null,
       x: 0, y: 0, angle: 0, target: 0, wob: 0, lastInput: g.now, lastSteer: 0, mind: { until: 0, mode: 'wander', aim: null } };
     g.players.set(p.pid, p);
     slot.player = p;
@@ -135,7 +136,8 @@ class House {
     if (!s || s.members[0] === p) return;
     const g = this.g;
     if (!p.tapRate || g.now > (p.tapSwitch || 0)) {
-      p.tapRate = rand(2.5, 6.5); p.tapOn = Math.random() < 0.65; p.tapSwitch = g.now + rand(2000, 6000);
+      if (p.ace) { p.tapRate = rand(11.5, 12.9); p.tapOn = true; p.tapSwitch = g.now + rand(1000, 2000); } // never stops, near the 13/s cap
+      else { p.tapRate = rand(2.5, 6.5); p.tapOn = Math.random() < 0.65; p.tapSwitch = g.now + rand(2000, 6000); }
     }
     if (!p.tapOn) return;
     p.tapAcc = (p.tapAcc || 0) + p.tapRate * 0.05;
@@ -202,6 +204,7 @@ class House {
   // Steering for a snake whose head is a host. Feels like a person: picks a plan every couple of
   // seconds, wobbles a little, and reacts right away to danger.
   steer(s, h) {
+    if (h.ace) return this.aceSteer(s, h);
     const g = this.g, mind = h.mind, R = g.arenaR;
     let want = null;
     // Danger first: trolls close by, then the wall
@@ -218,6 +221,75 @@ class House {
       want = a ? Math.atan2(a.y - h.y, a.x - h.x) : h.angle + (h.wob = h.wob * 0.95 + (Math.random() - 0.5) * 0.3);
     }
     h.target = want + rand(-0.08, 0.08);
+  }
+
+  // ---------- The ace (ericmar.g) ----------
+  // Re-plans 3x as often, always hunts the juiciest tail it can reach (aiming just behind the head to take
+  // the most), leads its target, never picks a head-on with a bigger snake, never bites itself, grabs boosts
+  // and boss tokens, and dodges boss attacks by looking ahead along 24 headings instead of reacting late.
+  aceSteer(s, h) {
+    const g = this.g, mind = h.mind, R = g.arenaR, speed = 190 * 1.1;
+    if (g.now > mind.until || !(mind.aim && mind.aim())) this.acePlan(s, h);
+    const a = mind.aim && mind.aim();
+    let want = a ? Math.atan2(a.y - h.y, a.x - h.x) : Math.atan2(-h.y, -h.x);
+    const away = (x, y, w) => { const d = Math.atan2(h.y - y, h.x - x); want = Math.atan2(Math.sin(want) * (1 - w) + Math.sin(d) * w, Math.cos(want) * (1 - w) + Math.cos(d) * w); };
+    for (const t of g.trolls) { const d = Math.hypot(t.x - h.x, t.y - h.y); if (d < 240) away(t.x, t.y, Math.min(1, (260 - d) / 160)); }
+    // Head-on with a bigger (or equal) snake loses your head; with a smaller one it captures theirs
+    for (const o of g.snakes) {
+      if (o === s) continue;
+      const oh = o.members[0], d = Math.hypot(oh.x - h.x, oh.y - h.y);
+      if (o.members.length < s.members.length) continue;
+      // the snake being hunted: only swerve when about to meet its head straight on (we want the neck right behind it)
+      if (o === mind.prey) { if (d < 110 && Math.abs(Math.atan2(Math.sin(Math.atan2(oh.y - h.y, oh.x - h.x) - h.angle), Math.cos(Math.atan2(oh.y - h.y, oh.x - h.x) - h.angle))) < 0.5) away(oh.x, oh.y, 0.7); continue; }
+      if (d < 230) away(oh.x, oh.y, Math.min(1, (250 - d) / 150));
+    }
+    // Don't bite your own body
+    for (let k = 5; k < s.members.length; k++) {
+      const q = s.members[k], ax = h.x + Math.cos(h.angle) * 55, ay = h.y + Math.sin(h.angle) * 55;
+      if (Math.hypot(q.x - ax, q.y - ay) < 50) { away(q.x, q.y, 0.8); break; }
+    }
+    if (Math.hypot(h.x, h.y) > R * 0.86) want = Math.atan2(-h.y, -h.x);
+    if (g.boss.phase === 'warning' && Math.hypot(h.x, h.y) < 480) want = Math.atan2(h.y, h.x); // clear the landing zone
+    const safe = g.boss.present ? g.boss.safeHeading(h, want, speed, mind.mode === 'token' ? a : null) : null;
+    h.target = safe !== null ? safe : want;
+  }
+
+  acePlan(s, h) {
+    const g = this.g, mind = h.mind, B = g.boss;
+    mind.until = g.now + rand(500, 1000);
+    const dist = p => Math.hypot(p.x - h.x, p.y - h.y);
+    // Boss tokens first when one is close: they end the fight and the ace wants the credit
+    if (B.present && B.tokens.length) {
+      let tk = null, best = 1300;
+      for (const o of B.tokens) { const d = dist(B.tokenPos(o)); if (d < best) { best = d; tk = o; } }
+      if (tk && (best < 650 || Math.random() < 0.6)) { mind.mode = 'token'; mind.aim = () => (B.tokens.includes(tk) ? B.tokenPos(tk) : null); return; }
+    }
+    // The best tail to steal: most segments taken per distance travelled, skipping snakes that can't be hit yet
+    let pick = null, score = 0;
+    for (const o of g.snakes) {
+      if (o === s || o.members.length < 2) continue;
+      const k = 1, d = dist(o.members[k]);
+      const sc = (o.members.length - k) / (300 + d) * (g.now < o.grace ? 0.4 : 1);
+      if (sc > score) { score = sc; pick = o; }
+    }
+    mind.prey = pick;
+    if (pick) {
+      const o = pick; mind.mode = 'hunt';
+      // Lead the target: aim between its 2nd segment and its head, further ahead the farther away it is
+      mind.aim = () => {
+        if (!g.snakes.includes(o) || o.members.length < 2) return null;
+        const a = o.members[1], b = o.members[0], lead = Math.min(0.8, dist(a) / 500);
+        return { x: a.x + (b.x - a.x) * lead * 0.6, y: a.y + (b.y - a.y) * lead * 0.6 };
+      };
+      return;
+    }
+    // Nobody to rob: grab a boost, then a lone head smaller than us, then cruise toward the crowd
+    let bolt = null, bd = 700;
+    for (const b of g.bolts) { const d = dist(b); if (d < bd) { bd = d; bolt = b; } }
+    if (bolt) { mind.mode = 'boost'; mind.aim = () => (g.bolts.includes(bolt) ? bolt : null); return; }
+    const prey = g.snakes.filter(o => o !== s && o.members.length < s.members.length).sort((a, b) => dist(a.members[0]) - dist(b.members[0]))[0];
+    if (prey) { mind.mode = 'hunt'; mind.aim = () => (g.snakes.includes(prey) ? prey.members[0] : null); return; }
+    mind.mode = 'wander'; mind.aim = () => ({ x: 0, y: 0 });
   }
 
   plan(s, h) {

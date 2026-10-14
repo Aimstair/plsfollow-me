@@ -704,8 +704,9 @@
   const biggest = () => view.snakes.reduce((a, b) => (b.members.length > a.members.length ? b : a));
 
   function draw(dt) {
-    const focusSnake = mine || (spectating ? specSnake() : null) || (view.snakes.length ? biggest() : null);
-    const focus = focusSnake ? focusSnake.members[0] : { x: 0, y: 0 };
+    const st = spectating && !mine ? specTarget() : null;
+    const focusSnake = mine || (st && st.s) || (view.snakes.length ? biggest() : null);
+    const focus = st ? st.m : focusSnake ? focusSnake.members[0] : { x: 0, y: 0 };
     // Phones (either orientation) zoom in a bit more so faces read; desktop is unchanged
     const zTarget = Math.max(Math.min(W, H), Math.max(W, H) * 0.6) / (me || spectating ? 860 : 1150);
     // Frame-rate independent easing, so 60 Hz and 120 Hz screens feel the same
@@ -982,21 +983,30 @@
 
   // ---------- Spectate ----------
   // Watch without joining: the camera follows one snake's head; ‹ › (or ← →) switch snakes, biggest first.
-  let spectating = false, specId = 0;
-  const specOrder = () => view ? view.snakes.slice().sort((a, b) => b.members.length - a.members.length) : [];
-  function specSnake() {
-    const list = specOrder(); if (!list.length) return null;
-    return list.find(s => s.id === specId) || list[0];
+  // FEATURED gets their own stop right after the snake they're in, even when they're not its head.
+  const FEATURED = 'ericmar.g';
+  let spectating = false, specKey = 0;
+  function specTargets() {
+    if (!view) return [];
+    let ace = null;
+    for (const s of view.snakes) { const i = s.members.findIndex(m => handleOf(m.pid) === FEATURED); if (i >= 0) { ace = { key: 'ace', s, m: s.members[i], idx: i }; break; } }
+    const list = view.snakes.slice().sort((a, b) => b.members.length - a.members.length).map(s => ({ key: s.id, s, m: s.members[0] }));
+    if (ace && ace.idx > 0) list.splice(list.findIndex(t => t.s === ace.s) + 1, 0, ace);
+    return list;
+  }
+  function specTarget() {
+    const list = specTargets(); if (!list.length) return null;
+    return list.find(t => t.key === specKey) || (specKey === 'ace' && list.find(t => handleOf(t.m.pid) === FEATURED)) || list.find(t => t.key !== 'ace') || list[0];
   }
   function specStep(dir) {
-    const list = specOrder(); if (!list.length) return;
-    const i = Math.max(0, list.findIndex(s => s.id === specId));
-    specId = list[(i + dir + list.length) % list.length].id;
+    const list = specTargets(); if (!list.length) return;
+    const cur = specTarget(), i = Math.max(0, list.findIndex(t => cur && t.key === cur.key));
+    specKey = list[(i + dir + list.length) % list.length].key;
     sfx('click'); specRender(true);
   }
   function startSpectate() {
     if (window.PFAudio) PFAudio.unlock();
-    spectating = true; const s = specSnake(); specId = s ? s.id : 0;
+    spectating = true; const t = specTargets().find(x => x.key !== 'ace') || specTarget(); specKey = t ? t.key : 0;
     $('intro').hidden = true; $('spec').hidden = false; specRender(true);
   }
   function stopSpectate(toMenu = true) {
@@ -1006,12 +1016,13 @@
   let specAt = 0;
   function specRender(force) {
     if (!spectating || (!force && now - specAt < 200)) return; specAt = now;
-    const s = specSnake();
-    if (!s) { $('specName').textContent = 'Nobody here yet'; $('specMeta').textContent = ''; $('specFollow').hidden = true; return; }
-    specId = s.id;
-    const list = specOrder(), h = s.members[0].pid, hd = handleOf(h), url = photoUrl(h);
+    const list = specTargets(), t = specTarget();
+    if (!t) { $('specName').textContent = 'Nobody here yet'; $('specMeta').textContent = ''; $('specFollow').hidden = true; return; }
+    if (specKey !== 'ace' || handleOf(t.m.pid) !== FEATURED) specKey = t.key; // keep watching them if they become a head
+    const s = t.s, h = t.m.pid, hd = handleOf(h), url = photoUrl(h), head = s.members[0].pid;
+    const where = t.key === 'ace' && t.idx > 0 ? `#${t.idx + 1} in ${handleOf(head) ? '@' + handleOf(head) : 'a'}'s snake of ${s.members.length}` : `snake of ${s.members.length}`;
     $('specName').textContent = hd ? '@' + hd : 'anonymous';
-    $('specMeta').textContent = `${isPromo(h) ? '✦ promoted · ' : ''}${hd ? PLAT[platOf(h)] + ' · ' : ''}snake of ${s.members.length} · ${fmt(s.left)} left · ${list.indexOf(s) + 1}/${list.length}`;
+    $('specMeta').textContent = `${isPromo(h) ? '✦ promoted · ' : ''}${hd ? PLAT[platOf(h)] + ' · ' : ''}${where} · ${fmt(s.left)} left · ${list.findIndex(x => x.key === t.key) + 1}/${list.length}`;
     const av = $('specAva'); av.textContent = url ? '' : hd ? hd[0].toUpperCase() : '?';
     av.style.backgroundImage = url ? `url("${url}")` : '';
     av.style.setProperty('--c', `hsl(${hueOf(h)},85%,62%)`);

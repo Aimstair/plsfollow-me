@@ -12,6 +12,7 @@ const CFG = {
   RACE_MS: 10000, // the last part of a turn is the race for next head
   SPEED: 190, TURN: 4.6, SPACING: 34, HIT: 30, SELF_SKIP: 4, // a head can bite its own body from the 5th segment back // tails are ~80% of the head's size
   TURN_HUMAN: 6.2, // players turn a bit faster than the bots (TURN)
+  ACE_SPEED: 1.1, ACE_TURN: 7.2, // the ace host (ericmar.g) moves 10% faster and turns sharper than anyone
   KNOCK_SPEED: 520, KNOCK_STUN_MS: 450, // getting your tail stolen shoves your head away
   SOLO_MS: 30000, BUMP_COST_MS: 5000, // a head with no tail has 30s to get one; head bumps between two of them cost 5s each
   GRACE_MS: 1500, STEAL_GRACE_MS: 800,
@@ -342,7 +343,7 @@ class Game {
   }
 
   move(s, dt) {
-    const m = s.members, h = m[0], sp = CFG.SPEED * (this.now < s.boostUntil ? CFG.BOOST : 1);
+    const m = s.members, h = m[0], sp = CFG.SPEED * (this.now < s.boostUntil ? CFG.BOOST : 1) * (h.ace ? CFG.ACE_SPEED : 1);
     // Humans steer; a head with no recent input (tab hidden, dropped) goes on autopilot
     if (h.bot) this.house.steer(s, h);
     else if (this.now - h.lastSteer > CFG.AUTOPILOT_MS) this.wander(h);
@@ -356,7 +357,7 @@ class Game {
       if (Math.hypot(h.kx, h.ky) < 8) h.kx = h.ky = 0;
     }
     let d = h.target - h.angle; d = Math.atan2(Math.sin(d), Math.cos(d));
-    const mt = (h.bot ? CFG.TURN : CFG.TURN_HUMAN) * dt; h.angle += Math.max(-mt, Math.min(mt, d));
+    const mt = (h.ace ? CFG.ACE_TURN : h.bot ? CFG.TURN : CFG.TURN_HUMAN) * dt; h.angle += Math.max(-mt, Math.min(mt, d));
     h.x += Math.cos(h.angle) * sp * dt; h.y += Math.sin(h.angle) * sp * dt;
     const r = Math.hypot(h.x, h.y);
     if (r > this.arenaR) { h.x *= this.arenaR / r; h.y *= this.arenaR / r; }
