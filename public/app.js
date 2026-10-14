@@ -203,8 +203,8 @@
   function onJson(m) {
     switch (m.t) {
       case 'hello': BOOT = m.boot; LEAD_MS = m.cfg.LEAD_MS; RACE_MS = m.cfg.RACE_MS; profiles.clear(); cache.clear(); break;
-      case 'prof': m.l.forEach(setProfile); liveDirty = true; break;
-      case 'bye': profiles.delete(m.pid); bubbles.delete(m.pid); liveDirty = true; break;
+      case 'prof': m.l.forEach(setProfile); break;
+      case 'bye': profiles.delete(m.pid); bubbles.delete(m.pid); break;
       case 'fame': renderFame(m.top); break;
       case 'chat': onChat(m); break;
       case 'you': myPid = m.pid; onJoined(); break;
@@ -333,6 +333,11 @@
   addEventListener('keydown', e => {
     if (typing(e)) return;
     keys[e.key] = true;
+    if (spectating && !myPid) {
+      if (e.key === 'ArrowLeft' || e.key === 'a') { e.preventDefault(); specStep(-1); return; }
+      if (e.key === 'ArrowRight' || e.key === 'd') { e.preventDefault(); specStep(1); return; }
+      if (e.key === 'Escape') { stopSpectate(true); return; }
+    }
     if (race && !$('duel').hidden && e.key === ' ') { e.preventDefault(); if (!e.repeat) padPress(); return; } // space taps; Enter is for chat
     if (e.key === 'Enter' && myPid && $('intro').hidden && $('shareModal').hidden) { e.preventDefault(); openChat(); }
   });
@@ -692,10 +697,10 @@
   const biggest = () => view.snakes.reduce((a, b) => (b.members.length > a.members.length ? b : a));
 
   function draw(dt) {
-    const focusSnake = mine || (view.snakes.length ? biggest() : null);
+    const focusSnake = mine || (spectating ? specSnake() : null) || (view.snakes.length ? biggest() : null);
     const focus = focusSnake ? focusSnake.members[0] : { x: 0, y: 0 };
     // Phones (either orientation) zoom in a bit more so faces read; desktop is unchanged
-    const zTarget = Math.max(Math.min(W, H), Math.max(W, H) * 0.6) / (me ? 860 : 1150);
+    const zTarget = Math.max(Math.min(W, H), Math.max(W, H) * 0.6) / (me || spectating ? 860 : 1150);
     // Frame-rate independent easing, so 60 Hz and 120 Hz screens feel the same
     const kf = 1 - Math.pow(0.85, dt * 60), kz = 1 - Math.pow(0.95, dt * 60);
     cam.x += (focus.x - cam.x) * kf; cam.y += (focus.y - cam.y) * kf; cam.z += (zTarget - cam.z) * kz;
@@ -844,11 +849,13 @@
     if (now - hudAt < 120) return; hudAt = now;
     const online = ws && ws.readyState === 1;
     $('chatBtn').hidden = !myPid;
+    $('backBtn').hidden = !(myPid || spectating) || !$('intro').hidden;
     $('share').hidden = !mine;
     $('share').classList.toggle('ingame', $('intro').hidden);
-    refreshLive();
+    specRender(false);
     $('audioCtl').classList.toggle('ingame', $('intro').hidden);
     $('donate').classList.toggle('ingame', $('intro').hidden);
+    $('donate').classList.toggle('spec', spectating);
     document.documentElement.style.setProperty('--bottom-h', ($('bottom').hidden ? 0 : $('bottom').offsetHeight) + 'px');
     const humans = view ? view.humans : 0;
     $('n').textContent = humans.toLocaleString();
@@ -958,19 +965,64 @@
     $('invite').hidden = false;
   }
   const syncJoinBtn = () => { const f = $('friend').value.trim().replace(/^@+/, ''); $('joinBtn').textContent = f ? `Join @${f}'s snake` : 'Join the tail'; };
-  $('friend').addEventListener('input', syncJoinBtn); syncJoinBtn();
-  // Suggest handles of people playing right now
-  let liveDirty = true, liveAt = 0;
-  function refreshLive() {
-    if (!liveDirty || now - liveAt < 1000) return; liveDirty = false; liveAt = now;
-    const dl = $('liveHandles'); dl.textContent = '';
-    let n = 0;
-    for (const p of profiles.values()) {
-      if (!p.handle || p.pid === myPid) continue;
-      const o = document.createElement('option'); o.value = '@' + p.handle; dl.append(o);
-      if (++n >= 200) break;
-    }
+  syncJoinBtn();
+
+  // ---------- Spectate ----------
+  // Watch without joining: the camera follows one snake's head; ‹ › (or ← →) switch snakes, biggest first.
+  let spectating = false, specId = 0;
+  const specOrder = () => view ? view.snakes.slice().sort((a, b) => b.members.length - a.members.length) : [];
+  function specSnake() {
+    const list = specOrder(); if (!list.length) return null;
+    return list.find(s => s.id === specId) || list[0];
   }
+  function specStep(dir) {
+    const list = specOrder(); if (!list.length) return;
+    const i = Math.max(0, list.findIndex(s => s.id === specId));
+    specId = list[(i + dir + list.length) % list.length].id;
+    sfx('click'); specRender(true);
+  }
+  function startSpectate() {
+    if (window.PFAudio) PFAudio.unlock();
+    spectating = true; const s = specSnake(); specId = s ? s.id : 0;
+    $('intro').hidden = true; $('spec').hidden = false; specRender(true);
+  }
+  function stopSpectate(toMenu = true) {
+    spectating = false; $('spec').hidden = true;
+    if (toMenu) $('intro').hidden = false;
+  }
+  let specAt = 0;
+  function specRender(force) {
+    if (!spectating || (!force && now - specAt < 200)) return; specAt = now;
+    const s = specSnake();
+    if (!s) { $('specName').textContent = 'Nobody here yet'; $('specMeta').textContent = ''; $('specFollow').hidden = true; return; }
+    specId = s.id;
+    const list = specOrder(), h = s.members[0].pid, hd = handleOf(h), url = photoUrl(h);
+    $('specName').textContent = hd ? '@' + hd : 'anonymous';
+    $('specMeta').textContent = `${hd ? PLAT[platOf(h)] + ' · ' : ''}snake of ${s.members.length} · ${fmt(s.left)} left · ${list.indexOf(s) + 1}/${list.length}`;
+    const av = $('specAva'); av.textContent = url ? '' : hd ? hd[0].toUpperCase() : '?';
+    av.style.backgroundImage = url ? `url("${url}")` : '';
+    av.style.setProperty('--c', `hsl(${hueOf(h)},85%,62%)`);
+    const f = $('specFollow'); f.hidden = !hd; f.dataset.plat = platOf(h); f.dataset.pid = h;
+  }
+  // Back button (top left): spectators go to the menu; players confirm, then leave the game
+  function leaveGame() {
+    if (!myPid) return;
+    send({ t: 'leave' });
+    if (spot) { stats.opens += spot.opens; spot = null; }
+    myPid = 0; me = mine = null; joinInfo = null; closeRace(); closeChat();
+    $('bottom').hidden = true; $('peek').hidden = true; $('shareModal').hidden = true; $('joinErr').hidden = true;
+    $('intro').hidden = false; $('joinBtn').disabled = false;
+  }
+  $('backBtn').addEventListener('click', () => {
+    if (spectating) { stopSpectate(true); return; }
+    if (myPid && confirm('Leave the game? You will lose your spot in the snake.')) leaveGame();
+  });
+  $('specBtn').addEventListener('click', startSpectate);
+  $('specPrev').addEventListener('click', () => specStep(-1));
+  $('specNext').addEventListener('click', () => specStep(1));
+  $('specExit').addEventListener('click', () => stopSpectate(true));
+  $('specJoin').addEventListener('click', () => { stopSpectate(true); $('handle').focus(); });
+  $('specFollow').addEventListener('click', e => follow(Number(e.currentTarget.dataset.pid)));
   const inviteLink = () => handleOf(myPid) ? `plsfollow.me/@${handleOf(myPid)}` : 'plsfollow.me';
 
   // ---------- Join ----------
@@ -1044,6 +1096,7 @@
   }
   let greetPending = false;
   function onJoined() {
+    if (spectating) stopSpectate(false);
     $('intro').hidden = true; $('bottom').hidden = false; $('joinBtn').disabled = false;
     greetPending = true; // greeted on the first frame that shows us in a snake
     if (joinInfo) joinInfo.follow = ''; // a reconnect just rejoins the biggest snake

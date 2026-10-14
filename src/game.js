@@ -526,6 +526,13 @@ class Game {
       case 'open': return this.open(c, m);
       case 'fameOpen': return this.fameOpen(c, m);
       case 'chat': return this.chat(c, m);
+      case 'leave': { // back to the menu: leave the snake but keep the connection
+        const p = c.player; if (!p) return;
+        c.player = null; p.client = null;
+        this.removePlayer(p);
+        this.broadcastJson({ t: 'bye', pid: p.pid });
+        return;
+      }
       case 'sync': return this.send(c, { t: 'sync', c: Number(m.c) || 0, s: Date.now() });
       default: return; // 'hb' and unknown messages only count as activity
     }

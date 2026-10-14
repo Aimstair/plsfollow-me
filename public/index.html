@@ -347,6 +347,24 @@ select option { color: #0b1220; background: #fff; }
 #gameOver p { margin: 0; font-weight: 800; font-size: 16px; text-shadow: 0 1px 2px rgba(0,0,0,.9); }
 @keyframes overIn { from { opacity: 0; transform: scale(.85); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { #gameOver { animation: none; } }
+#joinForm .specbtn { font: 800 14px var(--body); color: var(--ink); background: rgba(255,255,255,.06); border: 1px solid var(--line); border-radius: 14px; padding: 11px 14px; cursor: pointer; transition: background .15s, border-color .15s; }
+#joinForm .specbtn:hover, #joinForm .specbtn:focus-visible { background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.3); }
+/* Spectate bar: switch between snakes with the arrows */
+#spec { position: fixed; z-index: 4; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); width: min(560px, calc(100% - 24px)); display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 20px; }
+#spec .sarrow { flex: none; width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line); background: rgba(255,255,255,.07); color: var(--ink); font: 400 30px/1 var(--display); cursor: pointer; display: grid; place-items: center; padding-bottom: 4px; }
+#spec .sarrow:hover, #spec .sarrow:focus-visible { background: rgba(255,255,255,.14); }
+#spec .swho { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; }
+#spec .sava { flex: none; width: 42px; height: 42px; border-radius: 50%; background: var(--c, #3a475a) center / cover; display: grid; place-items: center; font-family: var(--display); font-size: 20px; color: rgba(12,16,30,.85); box-shadow: 0 0 0 2px var(--crown); }
+#spec .stext { min-width: 0; }
+#spec .sname { font-family: var(--display); font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#spec .smeta { font-size: 12px; font-weight: 700; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#spec .follow { padding: 9px 12px; font-size: 13px; }
+#spec .cta.sm { font-size: 14px; padding: 9px 14px; box-shadow: 0 3px 0 #b8336f; }
+@media (max-width: 640px) {
+  #spec { flex-wrap: wrap; justify-content: center; }
+  #spec .swho { order: -1; flex-basis: 100%; justify-content: center; }
+  #donate.spec { bottom: calc(130px + env(safe-area-inset-bottom, 0px)); }
+}
 #joinErr { margin: 0; color: #ff8fa3; font-weight: 700; font-size: 14px; }
 #status.lead.urgent { background: linear-gradient(180deg, #ff8a9e, #f43f5e); color: #2a0610; animation: urgent .6s ease-in-out infinite alternate; }
 @keyframes urgent { to { transform: scale(1.04); box-shadow: 0 8px 30px rgba(244,63,94,.55); } }
@@ -412,6 +430,7 @@ select option { color: #0b1220; background: #fff; }
 <canvas class="hud glass" id="mini" width="280" height="280" aria-label="Minimap"></canvas>
 
 <div id="audioCtl" role="group" aria-label="Sound, chat and support">
+  <button class="abtn glass" id="backBtn" hidden aria-label="Back to menu" title="Back to menu"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
   <button class="abtn glass" id="musicBtn" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V5l11-2v13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6" cy="18" r="3" fill="currentColor"/><circle cx="17" cy="16" r="3" fill="currentColor"/></svg></button>
   <button class="abtn glass" id="sfxBtn" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path class="wave" d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
   <button class="abtn glass" id="chatBtn" title="Chat (Enter)" aria-label="Chat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 4v-4h0A1.5 1.5 0 0 1 4 14.5z" fill="currentColor"/></svg></button>
@@ -450,11 +469,10 @@ select option { color: #0b1220; background: #fff; }
         <input id="photo" name="photo" type="file" accept="image/*">
         <button type="button" class="iconbtn" id="clearPhoto" hidden>Remove</button>
       </div>
-      <label for="friend">Join a friend's snake (optional)</label>
-      <input id="friend" name="friend" placeholder="@their handle, if they're playing" autocomplete="off" maxlength="31" list="liveHandles">
-      <datalist id="liveHandles"></datalist>
+      <input id="friend" name="friend" type="hidden">
       <p id="joinErr" role="alert" hidden></p>
       <button class="cta" type="submit" id="joinBtn">Join the tail</button>
+      <button class="specbtn" type="button" id="specBtn">👀 Just watch: spectate the snakes</button>
     </form>
     <section id="fame" class="glass" aria-labelledby="fameTitle">
       <div class="fame-head"><h2 id="fameTitle">🏆 Today's spotlight</h2><span>most-opened profiles · resets 00:00 UTC</span></div>
@@ -498,6 +516,18 @@ select option { color: #0b1220; background: #fff; }
       </div>
     </div>
   </div>
+</div>
+
+<div id="spec" class="glass" hidden role="region" aria-label="Spectating">
+  <button class="sarrow" id="specPrev" aria-label="Previous snake">‹</button>
+  <div class="swho">
+    <span class="sava" id="specAva"></span>
+    <div class="stext"><div class="sname" id="specName"></div><div class="smeta" id="specMeta"></div></div>
+  </div>
+  <button class="sarrow" id="specNext" aria-label="Next snake">›</button>
+  <button class="follow" id="specFollow" data-plat="ig">Follow</button>
+  <button class="cta sm" id="specJoin">Join</button>
+  <button class="iconbtn" id="specExit" aria-label="Back to menu">✕</button>
 </div>
 
 <div id="duel" hidden><div id="tapfx" aria-hidden="true"></div></div>
