@@ -53,7 +53,7 @@ const CHAT_PERSONAL_MS = [35000, 80000]; // each host waits at least this long b
 
 const RESPAWN_MS = 8000;      // back in the game this long after being knocked out
 const AWAY_MS = 45000;
-const ACE_AWAY_MS = 15000;    // the ace doesn't sit in someone else's tail for long        // a host stuck in another host's snake leaves after this, then respawns home
+const ACE_AWAY_MS = 15000;    // the ace doesn't sit in someone else's tail for long: it breaks out and leads        // a host stuck in another host's snake leaves after this, then respawns home
 const TAU = Math.PI * 2;
 const rand = (a, b) => a + Math.random() * (b - a);
 
@@ -99,7 +99,7 @@ class House {
     }
     for (const slot of this.slots) {
       const p = slot.player;
-      if (p && !g.players.has(p.pid)) { slot.player = null; slot.deadUntil = g.now + rand(RESPAWN_MS, RESPAWN_MS * 2); }
+      if (p && !g.players.has(p.pid)) { slot.player = null; slot.deadUntil = g.now + (slot.ace ? rand(1000, 2000) : rand(RESPAWN_MS, RESPAWN_MS * 2)); }
       if (!slot.player && g.now >= slot.deadUntil) this.spawn(slot);
       if (slot.player) {
         const q = slot.player, s = g.snakeOf(q);
@@ -110,7 +110,13 @@ class House {
         const lead = s && s.members[0], away = !slot.roam && lead && lead.bot && lead.group !== slot.group;
         if (!away) q.awaySince = 0;
         else if (!q.awaySince) q.awaySince = g.now;
-        else if (g.now - q.awaySince > (q.ace ? ACE_AWAY_MS : AWAY_MS)) { g.event({ k: 'out', pid: q.pid, x: Math.round(q.x), y: Math.round(q.y) }); g.eliminate(q, 'leave'); slot.player = null; slot.deadUntil = g.now + RESPAWN_MS; }
+        else if (q.ace && g.now - q.awaySince > ACE_AWAY_MS) {
+          // The ace breaks out of the tail right where it is and leads again (it never vanishes, so spectators stay on it)
+          const i = s.members.indexOf(q), prev = s.members[i - 1];
+          s.members.splice(i, 1);
+          if (prev) q.angle = q.target = Math.atan2(q.y - prev.y, q.x - prev.x) + rand(-0.6, 0.6);
+          g.makeSnake([q]); q.awaySince = 0;
+        } else if (!q.ace && g.now - q.awaySince > AWAY_MS) { g.event({ k: 'out', pid: q.pid, x: Math.round(q.x), y: Math.round(q.y) }); g.eliminate(q, 'leave'); slot.player = null; slot.deadUntil = g.now + RESPAWN_MS; }
       }
     }
   }
