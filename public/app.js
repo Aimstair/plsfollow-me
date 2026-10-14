@@ -80,7 +80,8 @@
 
   // ---------- Profiles ----------
   const profiles = new Map();
-  const setProfile = ([pid, handle, platform, img, host]) => profiles.set(pid, { pid, handle, platform, img: !!img, host: !!host, image: null });
+  const setProfile = ([pid, handle, platform, img, host, promo]) => profiles.set(pid, { pid, handle, platform, img: !!img, host: !!host, promo: !!promo, image: null });
+  const isPromo = pid => !!(profiles.get(pid) || {}).promo; // paid bots carry a ✦ promoted tag
   const handleOf = pid => (profiles.get(pid) || {}).handle || null;
   const platOf = pid => (profiles.get(pid) || {}).platform || 'ig';
   const name = pid => pid === myPid ? 'You' : handleOf(pid) ? '@' + handleOf(pid) : 'Anonymous';
@@ -426,7 +427,7 @@
     $('peekAva').style.setProperty('--c', `hsl(${hueOf(best.pid)},85%,62%)`);
     $('peekAva').style.backgroundImage = url ? `url("${url}")` : '';
     $('peekAva').style.backgroundSize = url ? 'cover' : '';
-    $('peekHandle').textContent = name(best.pid);
+    $('peekHandle').textContent = name(best.pid) + (isPromo(best.pid) ? ' ✦ promoted' : '');
     $('peekPlat').hidden = !h; setPlatBadge($('peekPlat'), platOf(best.pid));
     $('peekFollow').hidden = !h; $('peekFollow').dataset.plat = platOf(best.pid);
     el.hidden = false;
@@ -764,7 +765,7 @@
       if (!inView(h.x, h.y, 160)) continue;
       const hd = handleOf(h.pid);
       if (h.pid === myPid) drawLabel(h, hd ? `@${hd} · YOU` : 'YOU · in the spotlight', '#ffc93c', '#2a1a00', hd ? platOf(myPid) : null);
-      else drawLabel(h, hd ? '@' + hd : 'anonymous', 'rgba(14,22,38,.92)', '#f1f6fa', hd ? platOf(h.pid) : null);
+      else drawLabel(h, hd ? '@' + hd + (isPromo(h.pid) ? ' ✦' : '') : 'anonymous', 'rgba(14,22,38,.92)', '#f1f6fa', hd ? platOf(h.pid) : null);
     }
     if (me && myIdx > 0) {
       ctx.font = '900 11.5px Figtree, system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -896,7 +897,7 @@
       $('spotHandle').textContent = head.pid === myPid ? (hd ? '@' + hd : 'You') : name(head.pid);
       $('spotPlat').hidden = !hd; if ($('spotPlat').dataset.plat !== platOf(head.pid) || !$('spotPlat').firstChild || $('spotPlat').firstChild.nodeType === 3) setPlatBadge($('spotPlat'), platOf(head.pid));
       const watching = mine.members.length - 1;
-      $('spotSub').textContent = myIdx === 0 ? (!watching ? 'Nobody behind you yet. Share the link!' : hd ? `${watching} ${watching === 1 ? 'person sees' : 'people see'} you` : 'Add a handle to get followers') : `${watching} watching`;
+      $('spotSub').textContent = myIdx === 0 ? (!watching ? 'Nobody behind you yet. Share the link!' : hd ? `${watching} ${watching === 1 ? 'person sees' : 'people see'} you` : 'Add a handle to get followers') : `${watching} watching${isPromo(head.pid) ? ' · ✦ promoted' : ''}`;
       const f = $('spotFollow'); f.hidden = myIdx === 0 || !hd; f.dataset.plat = platOf(head.pid);
       $('spotOpens').hidden = !(myIdx === 0 && hd);
       $('spotOpensN').textContent = spot ? spot.opens : 0;
@@ -998,7 +999,7 @@
     specId = s.id;
     const list = specOrder(), h = s.members[0].pid, hd = handleOf(h), url = photoUrl(h);
     $('specName').textContent = hd ? '@' + hd : 'anonymous';
-    $('specMeta').textContent = `${hd ? PLAT[platOf(h)] + ' · ' : ''}snake of ${s.members.length} · ${fmt(s.left)} left · ${list.indexOf(s) + 1}/${list.length}`;
+    $('specMeta').textContent = `${isPromo(h) ? '✦ promoted · ' : ''}${hd ? PLAT[platOf(h)] + ' · ' : ''}snake of ${s.members.length} · ${fmt(s.left)} left · ${list.indexOf(s) + 1}/${list.length}`;
     const av = $('specAva'); av.textContent = url ? '' : hd ? hd[0].toUpperCase() : '?';
     av.style.backgroundImage = url ? `url("${url}")` : '';
     av.style.setProperty('--c', `hsl(${hueOf(h)},85%,62%)`);
@@ -1018,6 +1019,54 @@
     if (myPid && confirm('Leave the game? You will lose your spot in the snake.')) leaveGame();
   });
   $('specBtn').addEventListener('click', startSpectate);
+
+  // ---------- Paid bot: your profile in the snake for 30 days ----------
+  function openBotModal() {
+    const handle = $('handle').value.trim().replace(/^@+/, '').replace(/\s+/g, ''), plat = $('platform').value;
+    $('botName').textContent = handle ? '@' + handle : 'Add your handle in the form first';
+    $('botMeta').innerHTML = iconSvg(plat, 14); $('botMeta').append(' ' + PLAT[plat]);
+    const av = $('botAva'); av.textContent = photoB64 ? '' : handle ? handle[0].toUpperCase() : '?';
+    av.style.backgroundImage = photoB64 ? `url("data:image/jpeg;base64,${photoB64}")` : '';
+    av.style.setProperty('--c', 'hsl(330,85%,62%)');
+    $('botErr').hidden = true; $('botPay').disabled = !handle;
+    $('botModal').hidden = false;
+  }
+  $('botBtn').addEventListener('click', openBotModal);
+  $('botClose').addEventListener('click', () => { $('botModal').hidden = true; });
+  $('botModal').addEventListener('click', e => { if (e.target.id === 'botModal') $('botModal').hidden = true; });
+  $('botPay').addEventListener('click', async () => {
+    const handle = $('handle').value.trim().replace(/^@+/, '').replace(/\s+/g, '');
+    const showErr = msg => { $('botErr').textContent = msg; $('botErr').hidden = false; $('botPay').disabled = false; $('botPay').textContent = 'Continue to payment · $5'; };
+    if (!/^[A-Za-z0-9._-]{1,30}$/.test(handle)) return showErr('Add a valid handle in the join form first.');
+    $('botPay').disabled = true; $('botPay').textContent = 'Opening checkout…';
+    try {
+      const r = await fetch('/api/bot-order', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ handle, platform: $('platform').value, img: photoB64 }) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || !d.url) return showErr(d.error || "Couldn't start the payment. Please try again.");
+      saved.handle = handle; saved.platform = $('platform').value; persist();
+      location.href = d.url; // Stripe's checkout page
+    } catch { showErr("Couldn't reach the server. Please try again."); }
+  });
+  // Coming back from Stripe
+  (async () => {
+    const q = new URLSearchParams(location.search), result = q.get('bot'), order = q.get('order');
+    if (!result) return;
+    history.replaceState(null, '', location.pathname);
+    const note = $('botNote'); note.hidden = false;
+    if (result === 'cancel') { note.textContent = 'Payment cancelled. Nothing was charged.'; return; }
+    note.textContent = 'Payment received! Setting up your bot…';
+    for (let i = 0; i < 20 && order && /^[A-Za-z0-9_-]{6,20}$/.test(order); i++) {
+      try {
+        const st = await (await fetch('/api/bot-order/' + order)).json();
+        if (st.status === 'active') {
+          note.textContent = `🎉 Your bot @${st.handle} is in the snake until ${new Date(st.expiresAt).toLocaleDateString()}. Spectate to see it!`;
+          return;
+        }
+      } catch { /* try again */ }
+      await new Promise(r => setTimeout(r, 2000));
+    }
+    note.textContent = 'Payment received. Your bot will appear within a few minutes. Keep this order code in case you need help: ' + (order || '');
+  })();
   $('specPrev').addEventListener('click', () => specStep(-1));
   $('specNext').addEventListener('click', () => specStep(1));
   $('specExit').addEventListener('click', () => stopSpectate(true));

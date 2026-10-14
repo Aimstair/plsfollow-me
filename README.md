@@ -31,6 +31,7 @@ It prints messages received, race taps accepted/rejected, and the server's tick 
 |---|---|
 | `server.js` | HTTP static files, `/healthz`, avatar images at `/a/<boot>/<pid>`, WebSocket at `/ws` |
 | `src/house.js` | Host accounts played by the server (edit `GROUPS` at the top to change them) |
+| `src/paid.js` | Paid bots: $5 Stripe Checkout, signed webhook, 30-day orders saved to `DATA_DIR` |
 | `src/fame.js` | Today's spotlight hall of fame (most-opened profiles), saved to `DATA_DIR` |
 | `src/game.js` | Authoritative 20 Hz simulation: snakes, turns, races, steals, bites, trolls, binary state encoding |
 | `public/index.html` | Markup and styles |
@@ -63,6 +64,19 @@ A shared-cpu-1x machine with 512 MB costs a few dollars a month. The hall of fam
 `.github/workflows/fly-deploy.yml` deploys on every push to `main` (and can be run by hand from the
 Actions tab). It needs a repo secret named `FLY_API_TOKEN` containing a deploy token from
 `fly tokens create deploy -a plsfollow-me`.
+
+### Paid bots ($5 / 30 days)
+
+Players can pay to have a bot play as their profile for 30 days (tagged ✦ promoted). Setup:
+
+1. In the Stripe dashboard → Developers → Webhooks, add an endpoint
+   `https://plsfollow.me/api/stripe-webhook` for the event `checkout.session.completed`.
+2. Set the keys (the app restarts by itself):
+   `fly secrets set STRIPE_SECRET_KEY=sk_live_... STRIPE_WEBHOOK_SECRET=whsec_... -a plsfollow-me`
+3. See or remove paid bots: `https://plsfollow.me/admin/bots?token=<ADMIN_TOKEN>`
+   (add `&remove=<id>` to take one down).
+
+Until the Stripe keys are set, the button explains that payments aren't set up yet.
 
 ## Limits to know about
 

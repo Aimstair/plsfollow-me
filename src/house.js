@@ -53,9 +53,27 @@ class House {
     GROUPS.forEach((members, group) => members.forEach(m => this.slots.push({ ...m, group, player: null, deadUntil: 0 })));
     this.reserved = new Set(this.slots.map(s => s.handle.toLowerCase()));
     this.nextChat = 0; this.queue = []; this.idleAt = 0;
+    this.nextGroup = GROUPS.length;
+    // Paid bots (saved orders) join the roster too; they're not reserved, so their owner can still play
+    for (const o of game.paid.active()) this.addPaid(o);
     for (const slot of this.slots) {
       try { slot.img = fs.readFileSync(path.join(__dirname, '..', 'public', 'hosts', `${slot.handle}.jpg`)); } catch { slot.img = null; }
     }
+  }
+
+  // A paid bot: roams like a visitor, carries the ✦ promoted tag, leaves when its time runs out
+  addPaid(o) {
+    const have = this.slots.find(s => s.orderId === o.id);
+    if (have) { have.expiresAt = o.expiresAt; if (o.img) have.img = Buffer.from(o.img, 'base64'); return have; }
+    const slot = { handle: o.handle, platform: o.platform, roam: true, promo: true, orderId: o.id, expiresAt: o.expiresAt,
+      group: this.nextGroup++, player: null, deadUntil: 0, img: o.img ? Buffer.from(o.img, 'base64') : null };
+    this.slots.push(slot);
+    return slot;
+  }
+  removeSlot(slot) {
+    const g = this.g, p = slot.player;
+    if (p && g.players.has(p.pid)) { g.event({ k: 'out', pid: p.pid, x: Math.round(p.x), y: Math.round(p.y) }); g.eliminate(p, 'leave'); }
+    this.slots.splice(this.slots.indexOf(slot), 1);
   }
 
   isReserved(handle) { return !!handle && this.reserved.has(handle.toLowerCase()); }
@@ -64,6 +82,10 @@ class House {
   tick() {
     const g = this.g;
     this.chatTick();
+    // Paid bots whose 30 days are up (or that were removed) leave the arena
+    for (const slot of this.slots.slice()) {
+      if (slot.promo && (g.now > slot.expiresAt || !g.paid.active(g.now).some(o => o.id === slot.orderId))) this.removeSlot(slot);
+    }
     for (const slot of this.slots) {
       const p = slot.player;
       if (p && !g.players.has(p.pid)) { slot.player = null; slot.deadUntil = g.now + rand(RESPAWN_MS, RESPAWN_MS * 2); }
@@ -84,7 +106,7 @@ class House {
 
   spawn(slot) {
     const g = this.g;
-    const p = { pid: g.pidSeq++, bot: true, group: slot.group, handle: slot.handle, platform: slot.platform, img: slot.img, client: null,
+    const p = { pid: g.pidSeq++, bot: true, promo: !!slot.promo, group: slot.group, handle: slot.handle, platform: slot.platform, img: slot.img, client: null,
       x: 0, y: 0, angle: 0, target: 0, wob: 0, lastInput: g.now, lastSteer: 0, mind: { until: 0, mode: 'wander', aim: null } };
     g.players.set(p.pid, p);
     slot.player = p;

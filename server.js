@@ -64,8 +64,63 @@ function serveStatic(req, res, pathname) {
   });
 }
 
+// ---------- Paid bots: checkout, Stripe webhook, order status, admin ----------
+const json = (res, code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
+function readBody(req, limit) {
+  return new Promise((resolve, reject) => {
+    let size = 0; const chunks = [];
+    req.on('data', d => { size += d.length; if (size > limit) { reject(new Error('too big')); req.destroy(); } else chunks.push(d); });
+    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+    req.on('error', reject);
+  });
+}
+const orderHits = new Map(); // ip -> [timestamps]: at most 10 checkouts started per hour per visitor
+function tooMany(ip) {
+  const now = Date.now(), list = (orderHits.get(ip) || []).filter(t => now - t < 3600000);
+  list.push(now); orderHits.set(ip, list);
+  return list.length > 10;
+}
+const adminOk = token => {
+  const want = process.env.ADMIN_TOKEN || '';
+  return !!want && typeof token === 'string' && token.length === want.length && crypto.timingSafeEqual(Buffer.from(token), Buffer.from(want));
+};
+async function handleApi(req, res, url) {
+  const ip = req.headers['fly-client-ip'] || req.socket.remoteAddress || '?';
+  const p = url.pathname;
+  if (p === '/api/bot-info' && req.method === 'GET') return json(res, 200, { enabled: game.paid.enabled, price: 5, days: 30 });
+  if (p === '/api/bot-order' && req.method === 'POST') {
+    if (!game.paid.enabled) return json(res, 503, { error: "Payments aren't set up yet. Check back soon!" });
+    if (tooMany(ip)) return json(res, 429, { error: 'Too many tries. Please wait a bit.' });
+    let body; try { body = JSON.parse(await readBody(req, 90 * 1024)); } catch { return json(res, 400, { error: 'Bad request' }); }
+    const prof = game.checkProfile(body || {});
+    if (prof.error) return json(res, 400, { error: prof.error });
+    const host = req.headers.host || 'plsfollow.me', origin = (/^localhost(:\d+)?$/.test(host) ? 'http://' : 'https://') + host;
+    try { const { id, url: payUrl } = await game.paid.createCheckout(prof, origin); return json(res, 200, { id, url: payUrl }); }
+    catch (e) { console.error('checkout failed:', e.message); return json(res, 502, { error: "Couldn't start the payment. Please try again." }); }
+  }
+  const sm = p.match(/^\/api\/bot-order\/([A-Za-z0-9_-]{6,20})$/);
+  if (sm && req.method === 'GET') { const st = game.paid.status(sm[1]); return st ? json(res, 200, st) : json(res, 404, { error: 'Not found' }); }
+  if (p === '/api/stripe-webhook' && req.method === 'POST') {
+    let raw; try { raw = await readBody(req, 1024 * 1024); } catch { return json(res, 400, { error: 'too big' }); }
+    try {
+      const o = game.paid.handleWebhook(raw, req.headers['stripe-signature']);
+      if (o) { game.house.addPaid(o); console.log(`paid bot active: @${o.handle} (${o.platform}) until ${new Date(o.expiresAt).toISOString()}`); }
+      return json(res, 200, { received: true });
+    } catch (e) { return json(res, 400, { error: e.message }); }
+  }
+  // Admin: /admin/bots?token=... lists paid bots; add &remove=<id> to take one down
+  if (p === '/admin/bots' && req.method === 'GET') {
+    if (!adminOk(url.searchParams.get('token'))) return json(res, 403, { error: 'forbidden' });
+    const rm = url.searchParams.get('remove');
+    if (rm) { const o = game.paid.remove(rm); return json(res, o ? 200 : 404, o ? { removed: `@${o.handle}` } : { error: 'not found' }); }
+    return json(res, 200, game.paid.active().map(o => ({ id: o.id, handle: o.handle, platform: o.platform, expires: new Date(o.expiresAt).toISOString(), paid: new Date(o.paidAt).toISOString() })));
+  }
+  return json(res, 404, { error: 'Not found' });
+}
+
 const server = http.createServer((req, res) => {
-  const { pathname } = new URL(req.url, 'http://local');
+  const url = new URL(req.url, 'http://local'), { pathname } = url;
+  if (pathname.startsWith('/api/') || pathname.startsWith('/admin/')) { handleApi(req, res, url).catch(() => json(res, 500, { error: 'server error' })); return; }
   if (pathname === '/healthz') {
     res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
     res.end(JSON.stringify(game.health()));

@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const { Fame } = require('./fame');
 const { House } = require('./house');
+const { Paid } = require('./paid');
 
 const CFG = {
   TICK_MS: 50,
@@ -52,6 +53,7 @@ class Game {
     this.arenaR = this.radiusFor(0);
     this.perf = { sum: 0, n: 0, max: 0, avg: 0, peak: 0 };
     this.fame = new Fame(process.env.DATA_DIR);
+    this.paid = new Paid(process.env.DATA_DIR);
     this.house = new House(this);
     this.fameSent = -1;
     this.fameTimer = setInterval(() => this.flushFame(), 5000);
@@ -571,6 +573,20 @@ class Game {
     this.broadcastJson({ t: 'prof', l: [this.profileRow(p)] });
   }
 
+  // Shared checks for a profile (join form and bot purchases): handle format and words, platform, JPEG photo
+  checkProfile(m) {
+    const handle = typeof m.handle === 'string' ? m.handle.trim().replace(/^@+/, '') : '';
+    if (!handle || !HANDLE_RE.test(handle) || BANNED_RE.test(handle)) return { error: "That handle can't be used. Letters, numbers, . _ and - only." };
+    if (this.house.isReserved(handle)) return { error: `@${handle} is already one of the regulars.` };
+    const platform = PLATFORMS.has(m.platform) ? m.platform : 'ig';
+    let img = null;
+    if (typeof m.img === 'string' && m.img.length <= MAX_IMG_B64) {
+      const buf = Buffer.from(m.img, 'base64');
+      if (buf.length > 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) img = m.img;
+    }
+    return { handle, platform, img };
+  }
+
   chat(c, m) {
     const p = c.player;
     if (!p || typeof m.text !== 'string' || this.now - (c.lastChat || 0) < CFG.CHAT_GAP_MS) return;
@@ -609,7 +625,7 @@ class Game {
   }
 
   hostCount() { let n = 0; for (const sl of this.house.slots) if (sl.player) n++; return n; }
-  profileRow(p) { return [p.pid, p.handle, p.platform, p.img ? 1 : 0, p.bot ? 1 : 0]; }
+  profileRow(p) { return [p.pid, p.handle, p.platform, p.img ? 1 : 0, p.bot ? 1 : 0, p.promo ? 1 : 0]; }
   avatarOf(pid) { const p = this.players.get(pid); return p && p.img; }
 
   event(e) { this.events.push(e); if (this.house) this.house.onEvent(e); }
