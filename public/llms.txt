@@ -1,0 +1,20 @@
+# plsfollow.me (pls follow me)
+
+> A free multiplayer snake game that runs in any web browser. Every player is one segment of a giant snake made of strangers. Each head leads for 30 seconds, and while they lead, everyone in the snake sees their social profile (Instagram, TikTok, X, Threads, YouTube or Twitch) and can open it with one tap.
+
+## How to play
+- Open https://plsfollow.me, optionally add your handle, platform and photo, and tap "Join the tail".
+- The head steers with mouse, finger or arrow keys. Everyone behind follows the head's path.
+- Tap race: during each 30-second turn, followers tap anywhere on screen. Most taps when the timer ends becomes the next head.
+- Hit another snake's body to steal everyone behind that point. Lightning bolts give a short speed boost.
+- Purple trolls roam the map: a head bump costs the leader 5 seconds, a body hit breaks the snake, and a head with no tail is knocked out.
+- A head with no tail has 30 seconds to get one.
+- "Spectate" lets you watch without joining.
+
+## Facts
+- Free, no account, no download. Works on phones and desktops.
+- Visibility, not guaranteed followers: following is always the viewer's choice. Profile opens are counted on a daily "Today's spotlight" board.
+- Optional paid feature: "Become a bot", $5 for 30 days, a bot plays as your profile and is marked as promoted.
+
+## Links
+- Play: https://plsfollow.me/

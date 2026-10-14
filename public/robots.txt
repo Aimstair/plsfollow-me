@@ -1,0 +1,8 @@
+# plsfollow.me: a free multiplayer snake game
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /admin/
+Disallow: /a/
+
+Sitemap: https://plsfollow.me/sitemap.xml

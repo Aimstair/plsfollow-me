@@ -13,6 +13,7 @@ const TYPES = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
   '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.txt': 'text/plain; charset=utf-8',
+  '.xml': 'application/xml; charset=utf-8',
 };
 const CSP = [
   "default-src 'self'",
@@ -36,8 +37,10 @@ const INDEX = (() => {
     return `src="/${name}.js?v=${v}"`;
   });
 })();
-function serveIndex(req, res) {
-  res.writeHead(200, { 'Content-Type': TYPES['.html'], 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'strict-origin-when-cross-origin', 'Content-Security-Policy': CSP });
+// Invite links (/@handle) show the same page; keep them out of search results so they don't compete
+// with the home page (the page's canonical link points at https://plsfollow.me/ as well)
+function serveIndex(req, res, noindex) {
+  res.writeHead(200, { 'Content-Type': TYPES['.html'], 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'strict-origin-when-cross-origin', 'Content-Security-Policy': CSP, ...(noindex ? { 'X-Robots-Tag': 'noindex, follow' } : {}) });
   res.end(req.method === 'HEAD' ? undefined : INDEX);
 }
 
@@ -65,7 +68,7 @@ function serveStatic(req, res, pathname) {
 }
 
 // ---------- Paid bots: checkout, Stripe webhook, order status, admin ----------
-const json = (res, code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
+const json = (res, code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' }); res.end(JSON.stringify(obj)); };
 function readBody(req, limit) {
   return new Promise((resolve, reject) => {
     let size = 0; const chunks = [];
@@ -136,7 +139,8 @@ const server = http.createServer((req, res) => {
     return;
   }
   // Invite links like /@kirk.plays load the game with that friend prefilled
-  if (pathname === '/' || pathname === '/index.html' || /^\/@[A-Za-z0-9._-]{1,30}$/.test(pathname)) { serveIndex(req, res); return; }
+  if (pathname === '/' || pathname === '/index.html') { serveIndex(req, res, false); return; }
+  if (/^\/@[A-Za-z0-9._-]{1,30}$/.test(pathname)) { serveIndex(req, res, true); return; }
   serveStatic(req, res, pathname);
 });
 
