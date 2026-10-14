@@ -224,9 +224,16 @@ add visibility and never decide who wins.
 
 ---
 
-## 7. Boss: THE ALGORITHM 👁️
+## 7. Bosses
+
+Three bosses take turns. Each landing picks one at random (a third of the time each), and never the same
+boss twice in a row. Every boss has its own music theme, which gets faster and louder in the last 30s
+(enraged), and its own sound effects. The cycle, the warnings and the hit rules below apply to all three.
+
+### 7a. THE ALGORITHM 👁️
 
 A giant chrome eye that drops into the center of the arena, sweeps it with attacks, and leaves.
+Music: D harmonic minor, 138 → 152 BPM: choir, timpani, brass stabs, bells.
 
 **Cycle:** first landing ~60s after the server starts → **8s warning** (siren, growing shadow at the center)
 → **lands** (Slam) → **2 minutes** on the map (attacks every 4–6s; last 30s **enraged**: every 2–3s, red eye,
@@ -255,3 +262,35 @@ everyone sees who touched the last grass. Otherwise it leaves on its own.
 **Also:** trolls flee to the edges while it's down; hosts dodge warnings (not perfectly) and go for grass;
 attacks favor big snakes and leaders. The server runs the boss and checks every hit; clients draw it in sync
 using the shared game clock.
+
+### 7b. THE INFLUENCER 📸
+
+A giant ring light with a camera-lens eye and a LIVE badge, sitting in the center (body radius 110px).
+Music: dark synthwave in F minor, 150 → 166 BPM: four-on-the-floor with a sidechain pump, supersaw chords,
+16th arpeggios, claps, camera-shutter percussion and a siren lead.
+
+| Attack | Warning | Effect |
+|---|---|---|
+| 📸 Flash | 3-2-1 countdown, LOOK AWAY! | heads facing the boss (within ~70°) when the flash goes off are hit; the screen flashes white |
+| 💖 Love bomb | pink target circles | heart impacts aimed ahead of leaders |
+| 💍 Ring light | dashed ring with green gaps | an expanding ring that spins; steer through a gap (heads only) |
+| 📍 Spotlight | a gold circle on one player | follows its target for a few seconds, then stamps |
+
+**Fighting back: 📵 Unfollow.** Phone tokens appear around the map. Each one a head touches is one unfollow.
+**9 unfollows** before it leaves and it goes offline.
+
+### 7c. THE COMMENT SECTION 💬
+
+A dragon of 22 angry comment bubbles that roams the map and hunts snakes (150px/s).
+Music: E phrygian dominant, 146 → 162 BPM: taiko, chugging distorted bass, war horns, a snake-charmer lead and a gong.
+
+| Attack | Warning | Effect |
+|---|---|---|
+| 🔥 Hot take | orange cone in front of the head | fire breath along the cone |
+| 🌪️ Tail whip | yellow sweep arc | the tail swings through the arc |
+| 👥 Reply guys | chatter | small minions chase nearby snakes |
+| 🧵 Thread | dashed red circle with one green gap | a ring of comments closes in; get out through the gap |
+
+**Fighting back: ✂️ Block.** Block tokens ride on the dragon's body. Touch one with a head to cut 2 segments
+off. Cut it down to 4 segments and it's blocked.
+

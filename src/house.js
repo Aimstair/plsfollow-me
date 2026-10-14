@@ -36,10 +36,15 @@ const LINES = {
   bite: ['oops lol', 'we bit ourselves 💀', 'my bad', 'who was driving 😭'],
   welcome: ['welcome!', 'hi new person 👋', 'hey hey', 'more people yay', 'welcome to the snake 🐍'],
   cheer: ['go go go 👑', 'nice turn', 'go left!!', 'faster lol', "we're getting so long", 'dodge the goblin!'],
-  bossWarn: ['THE ALGORITHM IS COMING 😱', 'oh no not again', 'everyone run 🏃', 'here it comes!!'],
+  bossWarn: ['oh no not again', 'everyone run 🏃', 'here it comes!!', 'boss fight!! 😤'],
+  bossWarn_algorithm: ['THE ALGORITHM IS COMING 😱', 'not the algorithm again 😭'],
+  bossWarn_influencer: ['is that... the Influencer?? 📸', "don't look at the camera!!"],
+  bossWarn_comments: ['the COMMENT SECTION is here 💀', 'dragon incoming 🐉'],
   bossHit: ['shadowbanned 💀', 'the algorithm hates me', 'ouch!!', 'why me 😭'],
-  bossGrass: ['touching grass 🌱', 'go touch grass everyone!', 'grass secured', 'log it off!!'],
-  bossDown: ['WE LOGGED IT OFF 🎉', 'gg algorithm', 'touch grass wins 🌱', 'free boosts!!'],
+  bossToken_algorithm: ['touching grass 🌱', 'go touch grass everyone!', 'grass secured', 'log it off!!'],
+  bossToken_influencer: ['unfollowed lol 📵', 'unfollow unfollow unfollow', 'bye bye followers'],
+  bossToken_comments: ['blocked ✂️', 'BLOCK IT', 'cut its tail!!', 'reported 🚫'],
+  bossDown: ['WE DID IT 🎉', 'gg ez', 'teamwork!!', 'free boosts!!', "that's how you do it"],
   bossLeft: ['phew it left', 'see you in 3 min lol', 'we survived 😮‍💨'],
   idle: ['this is so chaotic lol', "who's tapping so fast", 'gm everyone', 'these goblins are evil', 'tap tap tap', 'lol the snake is huge', 'good luck everyone 🍀', 'hello 👋', 'anyone else on their lunch break', 'this is weirdly fun', 'i keep getting stolen 😭'],
 };
@@ -180,13 +185,13 @@ class House {
     else if (e.k === 'troll' || e.k === 'break') this.say(this.botIn(e.sid), 'troll', 0.5);
     else if (e.k === 'bite') this.say(this.botIn(e.sid), 'bite', 0.5);
     else if (e.k === 'bossHit') this.say(this.botIn(e.sid), 'bossHit', 0.35);
-    else if (e.k === 'grass') this.say(g.players.get(e.pid), 'bossGrass', 0.4);
+    else if (e.k === 'token') this.say(g.players.get(e.pid), 'bossToken_' + e.boss, 0.4);
   }
-  onBoss(kind) {
+  onBoss(phase, boss) {
     const alive = this.slots.map(s => s.player).filter(p => p && this.g.players.has(p.pid));
     if (!alive.length) return;
     const p = alive[Math.floor(Math.random() * alive.length)];
-    this.say(p, kind === 'warning' ? 'bossWarn' : kind === 'down' ? 'bossDown' : 'bossLeft', 0.8);
+    this.say(p, phase === 'warning' ? (Math.random() < .6 ? 'bossWarn_' + boss : 'bossWarn') : phase === 'down' ? 'bossDown' : 'bossLeft', 0.8);
   }
   onJoin(p, s) {
     if (p.bot || !s) return;
@@ -226,10 +231,10 @@ class House {
     if (rivals.length && Math.random() < 0.3) { mind.mode = 'fight'; mind.aim = hunt(rivals[Math.floor(Math.random() * rivals.length)]); return; }
     if ((lonely || Math.random() < 0.3) && near.length) { mind.mode = 'hunt'; mind.aim = hunt(near[Math.floor(Math.random() * near.length)]); return; }
     // While the Algorithm is down, grass is worth chasing
-    if (g.boss.present && g.boss.grass.length && Math.random() < 0.55) {
-      let gr = null, gd = 900;
-      for (const o of g.boss.grass) { const d = Math.hypot(o.x - h.x, o.y - h.y); if (d < gd) { gd = d; gr = o; } }
-      if (gr) { mind.mode = 'grass'; mind.aim = () => (g.boss.grass.includes(gr) ? gr : null); return; }
+    if (g.boss.present && g.boss.tokens.length && Math.random() < 0.55) {
+      let tk = null, gd = 900;
+      for (const o of g.boss.tokens) { const p = g.boss.tokenPos(o), d = Math.hypot(p.x - h.x, p.y - h.y); if (d < gd) { gd = d; tk = o; } }
+      if (tk) { mind.mode = 'token'; mind.aim = () => (g.boss.tokens.includes(tk) ? g.boss.tokenPos(tk) : null); return; }
     }
     let bolt = null, bd = 500;
     for (const b of g.bolts) { const d = Math.hypot(b.x - h.x, b.y - h.y); if (d < bd) { bd = d; bolt = b; } }

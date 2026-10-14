@@ -9,7 +9,7 @@ window.PFAudio = (() => {
   const save = () => { try { localStorage.setItem('pf-audio', JSON.stringify(prefs)); } catch { /* storage blocked */ } };
 
   let ctx = null, master, musicBus, sfxBus, reverb, delay, padFilter, crackle = null, crackleGain = null, timer = 0, nextTime = 0, step = 0;
-  let mode = 'lofi', intensity = 0; // music mode: 'lofi', or 'boss' with intensity 0 (warning) / 1 (fight) / 2 (enraged)
+  let mode = 'lofi', intensity = 0, theme = 'algorithm'; // music mode: 'lofi', or 'boss' with intensity 0 (warning) / 1 (fight) / 2 (enraged)
   const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
   const rand = (a, b) => a + Math.random() * (b - a);
 
@@ -223,19 +223,142 @@ window.PFAudio = (() => {
     if (intensity >= 1 && s % 2 === 0) bell(c.chord[[0, 2, 1, 2][s / 2]] + 24, t, intensity >= 2 ? 0.05 : 0.035);
   }
 
+  // ---------- Shared synth parts for the other two boss themes ----------
+  let pumpBus = null, distCurve = null;
+  // Everything melodic in the Influencer theme goes through this gain, which ducks on every kick (sidechain pump)
+  function pump() { if (!pumpBus) { pumpBus = ctx.createGain(); pumpBus.connect(musicBus); const v = ctx.createGain(); v.gain.value = 0.35; pumpBus.connect(v).connect(reverb); } return pumpBus; }
+  function duckPump(t, len) { const g = pump().gain; g.cancelScheduledValues(t); g.setValueAtTime(0.18, t); g.linearRampToValueAtTime(1, t + len); }
+  function dist() {
+    if (!distCurve) { distCurve = new Float32Array(1024); for (let i = 0; i < 1024; i++) { const x = i / 512 - 1; distCurve[i] = Math.tanh(x * 6); } }
+    const w = ctx.createWaveShaper(); w.curve = distCurve; w.oversample = '2x'; return w;
+  }
+  // One synth voice: stacked detuned oscillators, a filter envelope and a gain envelope
+  function voice(n, t, dur, { type = 'sawtooth', dets = [0], g = 0.05, cut = 3000, cutTo = 0, q = 0.7, attack = 0.005, release = 0.1, dest = musicBus, verb = 0, glideFrom = 0, vib = 0, shaper = false, bp = 0 } = {}) {
+    const e = ctx.createGain(), f = ctx.createBiquadFilter();
+    f.type = bp ? 'bandpass' : 'lowpass'; f.Q.value = q; f.frequency.setValueAtTime(bp || cut, t); if (cutTo) f.frequency.exponentialRampToValueAtTime(cutTo, t + dur);
+    e.gain.setValueAtTime(0, t); e.gain.linearRampToValueAtTime(g, t + attack); e.gain.setValueAtTime(g, t + Math.max(attack, dur - release)); e.gain.linearRampToValueAtTime(0, t + dur);
+    let head = f; if (shaper) { const w = dist(); w.connect(f); head = w; }
+    f.connect(e).connect(dest); if (verb) { const v = ctx.createGain(); v.gain.value = verb; e.connect(v).connect(reverb); }
+    for (const d of dets) {
+      const o = ctx.createOscillator(); o.type = type; o.detune.value = d;
+      if (glideFrom) { o.frequency.setValueAtTime(mtof(glideFrom), t); o.frequency.exponentialRampToValueAtTime(mtof(n), t + 0.06); } else o.frequency.value = mtof(n);
+      if (vib) { const l = ctx.createOscillator(), la = ctx.createGain(); l.frequency.value = 5.5; la.gain.value = vib; la.gain.setValueAtTime(0, t); la.gain.linearRampToValueAtTime(vib, t + dur * 0.6); l.connect(la).connect(o.detune); l.start(t); l.stop(t + dur + 0.05); }
+      o.connect(head); o.start(t); o.stop(t + dur + 0.05);
+    }
+  }
+  function noiseHit(t, { g = 0.1, type = 'highpass', freq = 6000, q = 0.7, len = 0.05, dest = musicBus, verb = 0 } = {}) {
+    const s = noise(), f = ctx.createBiquadFilter(), e = ctx.createGain();
+    f.type = type; f.frequency.value = freq; f.Q.value = q;
+    e.gain.setValueAtTime(g, t); e.gain.exponentialRampToValueAtTime(0.0005, t + len);
+    s.connect(f).connect(e).connect(dest); if (verb) { const v = ctx.createGain(); v.gain.value = verb; e.connect(v).connect(reverb); }
+    s.start(t, rand(0, 0.5)); s.stop(t + len + 0.02);
+  }
+
+  // ---------- 📸 The Influencer: dark synthwave in F minor ----------
+  // Fm - Db - Bbm - C, four-on-the-floor with a sidechain pump, supersaw chords, 16th arps, claps,
+  // camera-shutter percussion and a wailing siren lead when it gets enraged.
+  const INFL = [
+    { root: 29, chord: [53, 56, 60, 65], lead: [77, 75, 72, 75, 77, 80, 79, 77] }, // Fm
+    { root: 25, chord: [49, 53, 56, 61], lead: [77, 73, 72, 73, 80, 77, 73, 72] }, // Db
+    { root: 34, chord: [53, 58, 61, 65], lead: [73, 72, 70, 72, 73, 77, 82, 80] }, // Bbm
+    { root: 24, chord: [52, 55, 60, 64], lead: [79, 76, 72, 76, 79, 84, 83, 79] }, // C (major, so it lifts back to Fm)
+  ];
+  function shutter(t, g) { noiseHit(t, { g, type: 'bandpass', freq: 3800, q: 2, len: 0.025 }); noiseHit(t + 0.045, { g: g * 0.8, type: 'bandpass', freq: 2600, q: 2, len: 0.04 }); }
+  function playInfluencer(i, t) {
+    const S = bossStep(), bar = Math.floor(i / 16), s = i % 16, c = INFL[bar % 4], hard = intensity >= 2;
+    if (s % 4 === 0 && (intensity >= 1 || s % 8 === 0)) { bigKick(t, s === 0 ? 0.5 : 0.42); duckPump(t, S * 3.2); }
+    if (intensity >= 1 && (s === 4 || s === 12)) { noiseHit(t, { g: 0.2, type: 'bandpass', freq: 1500, q: 0.9, len: 0.16, verb: 0.5 }); noiseHit(t + 0.012, { g: 0.12, type: 'bandpass', freq: 1100, len: 0.12 }); }
+    if (hard && s === 14 && bar % 2) for (let k = 0; k < 4; k++) noiseHit(t + k * S / 2, { g: 0.06 + k * 0.03, type: 'bandpass', freq: 1500, len: 0.1 });
+    if (s % 4 === 2) noiseHit(t, { g: 0.06, freq: 7000, len: 0.18 }); // open hat on the off-beat
+    if (hard || (intensity >= 1 && s % 2 === 0)) noiseHit(t, { g: 0.025, freq: 9000, len: 0.03 });
+    if (intensity >= 1 && (s === 7 || s === 15)) shutter(t, 0.12);
+    // rolling bass: every 16th except the kicks, so it bounces against them
+    if (s % 4 !== 0) voice(c.root + 12 + (s % 4 === 3 ? 12 : 0), t, S * 0.9, { dets: [-6, 6], g: 0.09, cut: 1400, cutTo: 300, dest: pump() });
+    voice(c.root, t, S * 0.95, { type: 'sine', g: s % 4 === 0 ? 0 : 0.12, dest: pump() });
+    // supersaw chord, held for the bar
+    if (s === 0) for (const n of c.chord) voice(n + 12, t, S * 16, { dets: [-24, -11, 0, 11, 24], g: intensity ? 0.016 : 0.011, cut: hard ? 4200 : 2600, attack: 0.02, release: 0.2, dest: pump() });
+    // 16th arpeggio up through the chord
+    if (intensity >= 1) { const arp = [0, 1, 2, 3, 2, 1, 2, 3][s % 8], oct = s >= 8 ? 24 : 12; voice(c.chord[arp] + oct, t, S * 0.8, { type: 'square', g: 0.032, cut: 5200, cutTo: 900, dest: pump() }); }
+    // siren lead: two notes per beat with glide, an octave up when enraged
+    if (intensity >= 1 && s % 2 === 0 && (hard || bar % 4 >= 2)) {
+      const n = c.lead[s / 2] + (hard ? 12 : 0), prev = c.lead[(s / 2 + 7) % 8] + (hard ? 12 : 0);
+      voice(n, t, S * 1.9, { dets: [-8, 8], g: hard ? 0.035 : 0.028, cut: 3800, q: 2, glideFrom: prev, vib: 18, verb: 0.3, dest: musicBus });
+    }
+    if (s === 0 && bar % 4 === 0 && intensity >= 1) noiseHit(t, { g: 0.12, type: 'highpass', freq: 3000, len: 1.6, verb: 0.8 }); // crash
+  }
+
+  // ---------- 💬 The Comment Section: a war drum battle in E phrygian dominant ----------
+  // E - F - Dm - E: taiko, chugging distorted bass, war horns, a snake-charmer lead and a gong every 4 bars.
+  const DRAG = [
+    { root: 40, horn: [52, 56, 59], lead: [76, 77, 80, 77, 76, 74, 76, 77, 80, 81, 80, 77, 76, 77, 76, 72] }, // E
+    { root: 41, horn: [53, 57, 60], lead: [77, 76, 77, 80, 81, 80, 77, 76, 77, 80, 84, 83, 81, 80, 77, 76] }, // F
+    { root: 38, horn: [50, 53, 57], lead: [74, 76, 77, 74, 72, 74, 76, 77, 81, 80, 77, 76, 74, 72, 71, 72] }, // Dm
+    { root: 40, horn: [52, 56, 59], lead: [76, 80, 81, 80, 76, 77, 76, 74, 76, 77, 80, 77, 76, 77, 76, 76] }, // E
+  ];
+  function taiko(t, g = 0.45, low = 1) {
+    const o = ctx.createOscillator(), e = ctx.createGain();
+    o.frequency.setValueAtTime(110 * low, t); o.frequency.exponentialRampToValueAtTime(48 * low, t + 0.25);
+    e.gain.setValueAtTime(g, t); e.gain.exponentialRampToValueAtTime(0.001, t + 0.7);
+    o.connect(e).connect(musicBus); const v = ctx.createGain(); v.gain.value = 0.5; e.connect(v).connect(reverb); o.start(t); o.stop(t + 0.75);
+    noiseHit(t, { g: g * 0.5, type: 'lowpass', freq: 900, len: 0.12, verb: 0.4 });
+  }
+  function gong(t, g = 0.08) {
+    for (const [m, gg] of [[1, 1], [1.48, 0.6], [2.13, 0.5], [2.9, 0.35], [4.1, 0.2]]) {
+      const o = ctx.createOscillator(), e = ctx.createGain(); o.frequency.setValueAtTime(70 * m * 1.02, t); o.frequency.exponentialRampToValueAtTime(70 * m, t + 0.6);
+      e.gain.setValueAtTime(0, t); e.gain.linearRampToValueAtTime(g * gg, t + 0.05); e.gain.exponentialRampToValueAtTime(0.0005, t + 4.5);
+      o.connect(e).connect(musicBus); const v = ctx.createGain(); v.gain.value = 0.8; e.connect(v).connect(reverb); o.start(t); o.stop(t + 4.6);
+    }
+    noiseHit(t, { g: 0.1, type: 'bandpass', freq: 2500, q: 0.5, len: 2.5, verb: 1 });
+  }
+  function playComments(i, t) {
+    const S = bossStep(), bar = Math.floor(i / 16), s = i % 16, c = DRAG[bar % 4], hard = intensity >= 2;
+    // taiko pattern: BOOM . . BOOM . . BOOM . BOOM . BOOM BOOM (more hits when enraged)
+    const hits = hard ? [0, 3, 6, 8, 10, 11, 12, 14, 15] : intensity >= 1 ? [0, 3, 6, 8, 10, 11] : [0, 8];
+    if (hits.includes(s)) taiko(t, s === 0 ? 0.55 : 0.36, s % 8 === 0 ? 0.8 : 1);
+    if (intensity >= 1 && (s === 4 || s === 12)) { noiseHit(t, { g: 0.22, type: 'bandpass', freq: 1800, q: 0.8, len: 0.18, verb: 0.5 }); taiko(t, 0.18, 1.8); }
+    if (intensity >= 1 && s % 2 === 1) noiseHit(t, { g: hard ? 0.05 : 0.03, type: 'bandpass', freq: 5200, q: 3, len: 0.03 }); // rim clicks
+    if (bar % 4 === 3 && s >= 12 && intensity >= 1) taiko(t + S / 2, 0.2 + (s - 12) * 0.05, 1.3);
+    // chugging distorted bass
+    const chug = intensity >= 1 ? [0, 2, 3, 4, 6, 8, 10, 11, 12, 14] : [0, 4, 8, 12];
+    if (chug.includes(s)) { voice(c.root - 12, t, S * 0.85, { dets: [-7, 7], g: 0.05, cut: 900, cutTo: 250, shaper: true }); voice(c.root - 12, t, S * 0.9, { type: 'sine', g: 0.14 }); }
+    // war horns on bars 1 and 3, a long swell
+    if (s === 0 && (bar % 2 === 0 || hard)) for (const n of (intensity ? c.horn : [c.horn[0]])) voice(n, t, S * 14, { dets: [-10, 0, 10], g: 0.022, cut: 400, cutTo: 2000, q: 1.5, attack: S * 4, release: S * 3, verb: 0.6 });
+    // snake-charmer lead with vibrato, doubled an octave up when enraged
+    if (intensity >= 1 && (s % 2 === 0 || hard)) {
+      const n = c.lead[s];
+      if (n !== c.lead[s - 1] || s === 0) {
+        voice(n, t, S * (hard ? 1 : 1.9), { type: 'square', dets: [0, 6], g: 0.022, bp: 1600, q: 1.2, vib: 25, verb: 0.25 });
+        if (hard) voice(n + 12, t, S, { type: 'sawtooth', g: 0.012, cut: 4000, vib: 25, verb: 0.3 });
+      }
+    }
+    if (s === 0 && bar % 4 === 0) gong(t, intensity >= 1 ? 0.09 : 0.06);
+  }
+
+  function playBossTheme(i, t) {
+    if (theme === 'influencer') playInfluencer(i, t);
+    else if (theme === 'comments') playComments(i, t);
+    else playBoss(i, t);
+  }
+  // Each theme's step length: the Algorithm counts eighths, the others sixteenths
+  function bossStep() {
+    if (theme === 'influencer') return 60 / (intensity >= 2 ? 166 : 150) / 4;
+    if (theme === 'comments') return 60 / (intensity >= 2 ? 162 : 146) / 4;
+    return bossEighth();
+  }
+
   function scheduler() {
     while (nextTime < ctx.currentTime + 0.3) {
-      if (mode === 'boss') { playBoss(step, nextTime); nextTime += bossEighth(); }
+      if (mode === 'boss') { playBossTheme(step, nextTime); nextTime += bossStep(); }
       else { playStep(step, nextTime); nextTime += EIGHTH; }
       step++;
     }
   }
   // Switch between the lo-fi loop and the boss theme (level: null = lo-fi, 0/1/2 = boss intensity)
-  function setBossMusic(level) {
-    const want = level === null ? 'lofi' : 'boss';
-    if (want === mode && (want === 'lofi' || level === intensity)) return;
-    const switching = want !== mode;
-    mode = want; if (level !== null) intensity = level;
+  function setBossMusic(level, kind) {
+    const want = level == null ? 'lofi' : 'boss', th = kind || theme;
+    if (want === mode && (want === 'lofi' || (level === intensity && th === theme))) return;
+    const switching = want !== mode || (want === 'boss' && th !== theme);
+    mode = want; if (want === 'boss') { intensity = level; theme = th; }
     if (!ctx) return;
     if (switching) {
       step = 0; nextTime = Math.max(nextTime, ctx.currentTime + 0.05);
@@ -326,6 +449,31 @@ window.PFAudio = (() => {
     bossGrass: t => [76, 81, 86].forEach((n, i) => tone(mtof(n), t + i * 0.06, { type: 'triangle', dur: 0.3, gain: 0.16, verb: 0.3 })),
     bossDown: t => { [72, 76, 79, 84, 88].forEach((n, i) => tone(mtof(n), t + i * 0.1, { type: 'triangle', dur: 0.6, gain: 0.2, verb: 0.4 })); tone(80, t, { dur: 0.8, gain: 0.4, to: 30 }); whoosh(t, 300, 5000, 1.2, 0.35); },
     bossLeave: t => { whoosh(t, 200, 3000, 1.2, 0.3); tone(300, t, { dur: 1.2, gain: 0.08, to: 900 }); },
+    // ---------- The Influencer ----------
+    inflWarn: t => { for (let i = 0; i < 4; i++) { tone(1320, t + i * 0.5, { type: 'square', dur: 0.12, gain: 0.1, filter: 4000 }); tone(1760, t + i * 0.5 + 0.14, { type: 'square', dur: 0.16, gain: 0.1, filter: 4000 }); } SFX.inflGlitch(t + 2); },
+    inflBeep: (t, o) => { const n = o.n || 0; tone(n === 2 ? 1760 : 880, t, { type: 'sine', dur: n === 2 ? 0.35 : 0.15, gain: 0.22, verb: 0.2 }); },
+    inflFlash: t => { whoosh(t, 9000, 2000, 0.25, 0.5); tone(3200, t, { dur: 1.2, gain: 0.1, to: 2800, verb: 0.5 }); tone(90, t, { dur: 0.4, gain: 0.3, to: 40 }); for (const d of [0, 0.05]) { const c = noise(), f = ctx.createBiquadFilter(), e = ctx.createGain(); f.type = 'bandpass'; f.frequency.value = 3000; f.Q.value = 2; e.gain.setValueAtTime(0.35, t + d); e.gain.exponentialRampToValueAtTime(0.001, t + d + 0.04); c.connect(f).connect(e).connect(sfxBus); c.start(t + d); c.stop(t + d + 0.05); } },
+    inflKiss: (t, o) => { const d = Math.max(0.4, o.dur || 1.2); tone(900, t, { type: 'sine', dur: 0.12, gain: 0.15, to: 1800 }); tone(1800, t + 0.08, { dur: 0.1, gain: 0.08, to: 600 }); [72, 76, 79, 84].forEach((n, i) => tone(mtof(n + 12), t + 0.2 + i * d / 6, { type: 'triangle', dur: 0.3, gain: 0.06, verb: 0.4 })); whoosh(t, 1500, 400, d, 0.12); },
+    inflHeartBoom: (t, o) => { const g = o.g ?? 1; tone(180, t, { dur: 0.45, gain: 0.35 * g, to: 50, verb: 0.2 }); tone(mtof(88), t, { type: 'triangle', dur: 0.4, gain: 0.08 * g, to: mtof(76), verb: 0.4 }); whoosh(t, 4000, 600, 0.25, 0.3 * g); },
+    inflRingCharge: (t, o) => { const d = Math.max(0.3, o.dur || 1.2); tone(220, t, { type: 'sawtooth', dur: d, gain: 0.1, to: 1760, filter: 5000, attack: d * 0.9 }); tone(15000, t, { dur: d, gain: 0.02, attack: d * 0.8 }); whoosh(t, 1000, 9000, d, 0.12); },
+    inflRingZap: t => { tone(2400, t, { type: 'square', dur: 0.35, gain: 0.1, to: 200, filter: 6000 }); tone(60, t, { dur: 0.5, gain: 0.35, to: 30 }); whoosh(t, 8000, 500, 0.6, 0.4); },
+    inflPing: (t, o) => tone(1200 + (o.n || 0) * 140, t, { type: 'sine', dur: 0.1, gain: 0.12, verb: 0.15 }),
+    inflStamp: t => { tone(120, t, { dur: 0.6, gain: 0.5, to: 30, verb: 0.3 }); whoosh(t, 3000, 200, 0.4, 0.45); tone(mtof(84), t + 0.05, { type: 'triangle', dur: 0.4, gain: 0.08, verb: 0.4 }); },
+    inflUnfollow: t => { tone(mtof(79), t, { type: 'triangle', dur: 0.12, gain: 0.16 }); tone(mtof(72), t + 0.09, { type: 'triangle', dur: 0.25, gain: 0.16, verb: 0.3 }); tone(400, t, { type: 'square', dur: 0.08, gain: 0.05, to: 200, filter: 2000 }); },
+    inflGlitch: t => { for (let i = 0; i < 8; i++) tone(rand(200, 3000), t + i * 0.045, { type: 'square', dur: 0.04, gain: 0.08, filter: 5000, verb: 0 }); whoosh(t, 6000, 300, 0.4, 0.2); },
+    inflDown: t => { SFX.inflGlitch(t); tone(1200, t + 0.35, { type: 'sine', dur: 1.4, gain: 0.15, to: 60 }); tone(60, t + 1.6, { type: 'square', dur: 0.08, gain: 0.12, filter: 1500 }); },
+    // ---------- The Comment Section ----------
+    dragonWarn: t => { for (let i = 0; i < 3; i++) { tone(98, t + i * 0.9, { type: 'sawtooth', dur: 0.8, gain: 0.16, to: 92, filter: 900, attack: 0.15, verb: 0.5 }); tone(147, t + i * 0.9, { type: 'sawtooth', dur: 0.8, gain: 0.1, filter: 900, attack: 0.15, verb: 0.5 }); } SFX.dragonChatter(t + 0.2); },
+    dragonInhale: (t, o) => { const d = Math.max(0.3, o.dur || 1); whoosh(t, 4000, 300, d, 0.35); tone(60, t, { type: 'sawtooth', dur: d, gain: 0.08, to: 110, filter: 600, attack: d * 0.9 }); },
+    dragonFire: (t, o) => { const d = Math.max(0.3, o.dur || 1.2); const c = noise(), f = ctx.createBiquadFilter(), e = ctx.createGain(); c.loop = true; f.type = 'lowpass'; f.frequency.setValueAtTime(3500, t); f.frequency.linearRampToValueAtTime(1200, t + d); e.gain.setValueAtTime(0, t); e.gain.linearRampToValueAtTime(0.5, t + 0.05); e.gain.setValueAtTime(0.5, t + d - 0.2); e.gain.linearRampToValueAtTime(0, t + d); c.connect(f).connect(e).connect(sfxBus); e.connect(reverb); c.start(t); c.stop(t + d + 0.05); SFX.dragonRoar(t); },
+    dragonWhipWind: (t, o) => whoosh(t, 200, 1600, Math.max(0.3, o.dur || 0.8), 0.25),
+    dragonWhip: t => { whoosh(t - 0.15, 600, 7000, 0.2, 0.5); const c = noise(), e = ctx.createGain(); e.gain.setValueAtTime(0.6, t); e.gain.exponentialRampToValueAtTime(0.001, t + 0.06); c.connect(e).connect(sfxBus); e.connect(reverb); c.start(t); c.stop(t + 0.07); tone(100, t, { dur: 0.3, gain: 0.3, to: 40 }); },
+    dragonChatter: t => { for (let i = 0; i < 14; i++) { const f0 = rand(260, 700); tone(f0, t + i * 0.06 + rand(0, 0.03), { type: 'square', dur: 0.05, gain: 0.04, to: f0 * rand(0.7, 1.4), filter: 2000, verb: 0.1 }); } },
+    dragonThread: (t, o) => { const d = Math.max(0.3, o.dur || 2); for (let i = 0; i < d / 0.09; i++) tone(rand(900, 1500), t + i * 0.09, { type: 'triangle', dur: 0.05, gain: 0.05, verb: 0 }); whoosh(t, 300, 2000, d, 0.15); },
+    dragonSnap: t => { tone(1800, t, { type: 'square', dur: 0.08, gain: 0.1, to: 300, filter: 4000 }); whoosh(t, 5000, 800, 0.2, 0.3); },
+    dragonBlock: t => { tone(mtof(64), t, { type: 'square', dur: 0.1, gain: 0.1, filter: 2500 }); tone(mtof(76), t + 0.07, { type: 'triangle', dur: 0.25, gain: 0.15, verb: 0.3 }); tone(80, t, { dur: 0.35, gain: 0.35, to: 35 }); whoosh(t, 4000, 300, 0.25, 0.3); },
+    dragonRoar: t => { for (const [f0, det] of [[55, 0], [58, 10], [82, -6], [110, 4]]) { const oo = ctx.createOscillator(), e = ctx.createGain(), fl = ctx.createBiquadFilter(), w = dist(), vib = ctx.createOscillator(), va = ctx.createGain(); oo.type = 'sawtooth'; oo.frequency.setValueAtTime(f0 * 1.3, t); oo.frequency.exponentialRampToValueAtTime(f0, t + 1.5); oo.detune.value = det; vib.frequency.value = 11; va.gain.value = 14; vib.connect(va).connect(oo.frequency); fl.type = 'lowpass'; fl.frequency.setValueAtTime(400, t); fl.frequency.linearRampToValueAtTime(2200, t + 0.4); fl.frequency.linearRampToValueAtTime(350, t + 1.6); e.gain.setValueAtTime(0, t); e.gain.linearRampToValueAtTime(0.09, t + 0.15); e.gain.exponentialRampToValueAtTime(0.001, t + 1.7); oo.connect(w).connect(fl).connect(e).connect(sfxBus); e.connect(reverb); oo.start(t); oo.stop(t + 1.75); vib.start(t); vib.stop(t + 1.75); } whoosh(t, 500, 1500, 1.3, 0.3); },
+    dragonDown: t => { SFX.dragonRoar(t); tone(300, t + 0.5, { type: 'sawtooth', dur: 1.5, gain: 0.1, to: 40, filter: 1200 }); for (let i = 0; i < 10; i++) tone(rand(400, 900), t + 0.6 + i * 0.12, { type: 'square', dur: 0.06, gain: 0.03, filter: 2000 }); },
     chat: t => { tone(780, t, { type: 'sine', dur: 0.09, gain: 0.12, to: 1150, verb: 0.1 }); },
     click: t => tone(900, t, { type: 'triangle', dur: 0.04, gain: 0.12, verb: 0 }),
   };
@@ -353,8 +501,8 @@ window.PFAudio = (() => {
       if (delay < -0.25) return; // already over
       SFX[name](ctx.currentTime + Math.max(0.01, delay), opts || {});
     },
-    // Boss theme: null = back to lo-fi, 0 = warning, 1 = fight, 2 = enraged
-    bossMusic(level) { setBossMusic(level); },
+    // Boss theme: null = back to lo-fi, 0 = warning, 1 = fight, 2 = enraged; kind picks the boss's own theme
+    bossMusic(level, kind) { setBossMusic(level, kind); },
     // Briefly lower the music so a big moment (like game over) stands out
     duck(sec) {
       if (!ctx || !timer) return;

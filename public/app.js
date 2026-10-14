@@ -223,6 +223,7 @@
       case 'race': onRaceBoard(m); break;
       case 'boss': if (window.PFBoss) PFBoss.onSnapshot(m); break;
       case 'bossAtk': if (window.PFBoss) PFBoss.onAttack(m.a); break;
+      case 'bossLive': if (window.PFBoss) PFBoss.onLive(m); break;
       case 'tapr': onTapResult(m); break;
       case 'opened':
         if (spot) {
@@ -263,7 +264,7 @@
         shake.a = e.head === myPid ? 12 : 6; sfx('troll');
         toast(e.head === myPid ? `👹 A troll bumped you: −${e.ms / 1000}s of your turn!` : `👹 A troll bumped the head: −${e.ms / 1000}s. The race comes sooner!`);
       }
-    } else if (e.k === 'grass' || e.k === 'bossHit') {
+    } else if (e.k === 'token' || e.k === 'bossHit' || e.k === 'bossStamp') {
       if (window.PFBoss) PFBoss.onEvent(e, { pid: myPid, sid: me0.sid, idx: me0.idx });
     } else if (e.k === 'bump') {
       burst(e.x, e.y, 30, ['#ffc93c', '#ff5f7e', '#fff'], { speed: 340, life: 650, size: 5 });
@@ -788,6 +789,7 @@
     const vg = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * .35, W / 2, H / 2, Math.max(W, H) * .75);
     vg.addColorStop(0, 'rgba(4,8,16,0)'); vg.addColorStop(1, 'rgba(4,8,16,.6)');
     ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+    if (window.PFBoss) PFBoss.drawScreen(ctx, W, H);
     drawBubbles();
     if (me && myIdx > 0) {
       const hs = toScreen(me.x, me.y), pad = 46;
@@ -1446,7 +1448,7 @@
     now: () => performance.now() + offset - net.behind,
     myHead: () => me,
     at: (n, d, o) => window.PFAudio && PFAudio.at(n, d, o),
-    music: level => window.PFAudio && PFAudio.bossMusic(level),
+    music: (level, kind) => window.PFAudio && PFAudio.bossMusic(level, kind),
   });
   connect();
   requestAnimationFrame(frame);
