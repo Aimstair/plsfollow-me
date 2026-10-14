@@ -8,7 +8,8 @@ window.PFAudio = (() => {
   try { Object.assign(prefs, JSON.parse(localStorage.getItem('pf-audio') || '{}')); } catch { /* storage blocked */ }
   const save = () => { try { localStorage.setItem('pf-audio', JSON.stringify(prefs)); } catch { /* storage blocked */ } };
 
-  let ctx = null, master, musicBus, sfxBus, reverb, delay, padFilter, crackle = null, timer = 0, nextTime = 0, step = 0;
+  let ctx = null, master, musicBus, sfxBus, reverb, delay, padFilter, crackle = null, crackleGain = null, timer = 0, nextTime = 0, step = 0;
+  let mode = 'lofi', intensity = 0; // music mode: 'lofi', or 'boss' with intensity 0 (warning) / 1 (fight) / 2 (enraged)
   const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
   const rand = (a, b) => a + Math.random() * (b - a);
 
@@ -105,9 +106,9 @@ window.PFAudio = (() => {
     const len = ctx.sampleRate * 4, b = ctx.createBuffer(1, len, ctx.sampleRate), d = b.getChannelData(0);
     for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * 0.015 + (Math.random() < 0.0004 ? (Math.random() * 2 - 1) * 0.6 : 0);
     const s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
-    s.buffer = b; s.loop = true; f.type = 'highpass'; f.frequency.value = 900; g.gain.value = 0.16;
+    s.buffer = b; s.loop = true; f.type = 'highpass'; f.frequency.value = 900; g.gain.value = mode === 'boss' ? 0 : 0.16;
     s.connect(f).connect(g).connect(musicBus); s.start();
-    crackle = s;
+    crackle = s; crackleGain = g;
   }
 
   function playStep(i, t) {
@@ -125,8 +126,122 @@ window.PFAudio = (() => {
       pluck(PENTA[playStep.last], tt + rand(0, 0.015), rand(0.6, 1));
     }
   }
+  // ---------- Final boss theme ----------
+  // D harmonic minor, Dm - Bb - Gm - A, one bar each: driving bass, timpani, choir, brass stabs, a bell
+  // ostinato and drums. Intensity 0 = warning (drums, bass, timpani), 1 = the fight, 2 = enraged.
+  const BOSS_PROG = [
+    { root: 38, chord: [50, 53, 57] },  // Dm
+    { root: 34, chord: [46, 50, 53] },  // Bb
+    { root: 31, chord: [43, 46, 50] },  // Gm
+    { root: 33, chord: [45, 49, 52] },  // A (the raised C# makes it sound epic)
+  ];
+  const bossEighth = () => 60 / (intensity >= 2 ? 152 : 138) / 2;
+  function bossBass(n, t, dur) {
+    for (const [type, g, det] of [['sawtooth', 0.09, 0], ['sine', 0.16, 0]]) {
+      const o = ctx.createOscillator(), e = ctx.createGain(), f = ctx.createBiquadFilter();
+      o.type = type; o.frequency.value = mtof(n); o.detune.value = det;
+      f.type = 'lowpass'; f.frequency.setValueAtTime(900, t); f.frequency.exponentialRampToValueAtTime(260, t + dur);
+      e.gain.setValueAtTime(0, t); e.gain.linearRampToValueAtTime(g, t + 0.01); e.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      o.connect(f).connect(e).connect(musicBus); o.start(t); o.stop(t + dur + 0.05);
+    }
+  }
+  function bigKick(t, g = 0.45) {
+    const o = ctx.createOscillator(), e = ctx.createGain();
+    o.frequency.setValueAtTime(160, t); o.frequency.exponentialRampToValueAtTime(38, t + 0.16);
+    e.gain.setValueAtTime(g, t); e.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+    o.connect(e).connect(musicBus); o.start(t); o.stop(t + 0.42);
+  }
+  function snare(t, g = 0.16) {
+    const s = noise(), f = ctx.createBiquadFilter(), e = ctx.createGain();
+    f.type = 'bandpass'; f.frequency.value = 1900; f.Q.value = 0.7;
+    e.gain.setValueAtTime(g, t); e.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+    s.connect(f).connect(e); e.connect(musicBus); const v = ctx.createGain(); v.gain.value = 0.5; e.connect(v).connect(reverb);
+    s.start(t, rand(0, 0.5)); s.stop(t + 0.25);
+    const o = ctx.createOscillator(), oe = ctx.createGain(); o.frequency.setValueAtTime(220, t); o.frequency.exponentialRampToValueAtTime(140, t + 0.08);
+    oe.gain.setValueAtTime(g * 0.8, t); oe.gain.exponentialRampToValueAtTime(0.001, t + 0.1); o.connect(oe).connect(musicBus); o.start(t); o.stop(t + 0.12);
+  }
+  function hat(t, g = 0.03) {
+    const s = noise(), f = ctx.createBiquadFilter(), e = ctx.createGain();
+    f.type = 'highpass'; f.frequency.value = 7500;
+    e.gain.setValueAtTime(g, t); e.gain.exponentialRampToValueAtTime(0.0005, t + 0.04);
+    s.connect(f).connect(e).connect(musicBus); s.start(t, rand(0, 0.5)); s.stop(t + 0.06);
+  }
+  function timpani(n, t, g = 0.3) {
+    const o = ctx.createOscillator(), e = ctx.createGain();
+    o.frequency.setValueAtTime(mtof(n) * 1.05, t); o.frequency.exponentialRampToValueAtTime(mtof(n), t + 0.12);
+    e.gain.setValueAtTime(g, t); e.gain.exponentialRampToValueAtTime(0.001, t + 1.1);
+    o.connect(e); e.connect(musicBus); const v = ctx.createGain(); v.gain.value = 0.6; e.connect(v).connect(reverb);
+    o.start(t); o.stop(t + 1.15);
+    const s = noise(), f = ctx.createBiquadFilter(), ne = ctx.createGain(); f.type = 'lowpass'; f.frequency.value = 500;
+    ne.gain.setValueAtTime(g * 0.6, t); ne.gain.exponentialRampToValueAtTime(0.001, t + 0.15); s.connect(f).connect(ne).connect(musicBus); s.start(t); s.stop(t + 0.18);
+  }
+  // "Aah" choir: detuned saws through two vowel formants, slow swell, lots of reverb
+  function choir(notes, t, dur, g = 0.03) {
+    const out = ctx.createGain(); out.gain.setValueAtTime(0, t); out.gain.linearRampToValueAtTime(g, t + 0.35); out.gain.setValueAtTime(g, t + dur - 0.15); out.gain.linearRampToValueAtTime(0, t + dur + 0.6);
+    for (const fq of [750, 1150]) { const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = fq; f.Q.value = 5; out.connect(f); f.connect(musicBus); const v = ctx.createGain(); v.gain.value = 0.9; f.connect(v).connect(reverb); }
+    for (const n of notes) for (const det of [-14, 0, 14]) {
+      const o = ctx.createOscillator(), vib = ctx.createOscillator(), va = ctx.createGain();
+      o.type = 'sawtooth'; o.frequency.value = mtof(n); o.detune.value = det;
+      vib.frequency.value = 5 + Math.random(); va.gain.value = 4; vib.connect(va).connect(o.detune);
+      o.connect(out); o.start(t); o.stop(t + dur + 0.7); vib.start(t); vib.stop(t + dur + 0.7);
+    }
+  }
+  function stab(notes, t, g = 0.045) {
+    for (const n of notes) for (const det of [-8, 8]) {
+      const o = ctx.createOscillator(), e = ctx.createGain(), f = ctx.createBiquadFilter();
+      o.type = 'sawtooth'; o.frequency.value = mtof(n); o.detune.value = det;
+      f.type = 'lowpass'; f.frequency.setValueAtTime(3200, t); f.frequency.exponentialRampToValueAtTime(700, t + 0.25);
+      e.gain.setValueAtTime(0, t); e.gain.linearRampToValueAtTime(g, t + 0.01); e.gain.exponentialRampToValueAtTime(0.001, t + 0.32);
+      o.connect(f).connect(e); e.connect(musicBus); const v = ctx.createGain(); v.gain.value = 0.3; e.connect(v).connect(reverb);
+      o.start(t); o.stop(t + 0.35);
+    }
+  }
+  function bell(n, t, g = 0.05) {
+    for (const [mul, gg] of [[1, 1], [2.76, 0.4], [5.4, 0.15]]) {
+      const o = ctx.createOscillator(), e = ctx.createGain(); o.frequency.value = mtof(n) * mul;
+      e.gain.setValueAtTime(g * gg, t); e.gain.exponentialRampToValueAtTime(0.0005, t + 1.2);
+      o.connect(e); e.connect(musicBus); e.connect(delay); o.start(t); o.stop(t + 1.25);
+    }
+  }
+  function playBoss(i, t) {
+    const bar = Math.floor(i / 8), s = i % 8, c = BOSS_PROG[bar % 4], E = bossEighth();
+    // driving bass ostinato
+    bossBass(c.root + [0, 0, 12, 0, 0, 12, 0, 7][s], t, E * 0.95);
+    // drums
+    const kicks = intensity >= 2 ? [0, 2, 3, 4, 6, 7] : intensity >= 1 ? [0, 3, 4, 7] : [0, 4];
+    if (kicks.includes(s)) bigKick(t, s === 0 ? 0.5 : 0.38);
+    if (intensity >= 1 && (s === 2 || s === 6)) snare(t);
+    if (intensity >= 2 && s === 7) snare(t + E / 2, 0.08);
+    if (intensity >= 1) { hat(t); if (intensity >= 2) hat(t + E / 2, 0.02); }
+    // timpani on the downbeat every other bar, a roll into each 4-bar phrase
+    if (s === 0 && bar % 2 === 0) timpani(c.root + 12, t, 0.32);
+    if (intensity >= 1 && bar % 4 === 3 && s >= 6) for (let k = 0; k < 3; k++) timpani(c.root + 12, t + k * E / 3, 0.12 + k * 0.05);
+    // choir swells on every chord, an octave higher when enraged
+    if (intensity >= 1 && s === 0) choir(c.chord.map(n => n + (intensity >= 2 ? 24 : 12)), t, E * 8, intensity >= 2 ? 0.035 : 0.028);
+    // brass stabs and the bell ostinato
+    if (intensity >= 1 && (s === 0 || s === 5 || (intensity >= 2 && s === 3))) stab(c.chord.map(n => n + 12), t);
+    if (intensity >= 1 && s % 2 === 0) bell(c.chord[[0, 2, 1, 2][s / 2]] + 24, t, intensity >= 2 ? 0.05 : 0.035);
+  }
+
   function scheduler() {
-    while (nextTime < ctx.currentTime + 0.3) { playStep(step, nextTime); nextTime += EIGHTH; step++; }
+    while (nextTime < ctx.currentTime + 0.3) {
+      if (mode === 'boss') { playBoss(step, nextTime); nextTime += bossEighth(); }
+      else { playStep(step, nextTime); nextTime += EIGHTH; }
+      step++;
+    }
+  }
+  // Switch between the lo-fi loop and the boss theme (level: null = lo-fi, 0/1/2 = boss intensity)
+  function setBossMusic(level) {
+    const want = level === null ? 'lofi' : 'boss';
+    if (want === mode && (want === 'lofi' || level === intensity)) return;
+    const switching = want !== mode;
+    mode = want; if (level !== null) intensity = level;
+    if (!ctx) return;
+    if (switching) {
+      step = 0; nextTime = Math.max(nextTime, ctx.currentTime + 0.05);
+      if (crackleGain) crackleGain.gain.setTargetAtTime(mode === 'boss' ? 0 : 0.16, ctx.currentTime, 0.3);
+      if (timer) { musicBus.gain.cancelScheduledValues(ctx.currentTime); musicBus.gain.setValueAtTime(musicBus.gain.value, ctx.currentTime); musicBus.gain.linearRampToValueAtTime(mode === 'boss' ? 0.4 : 0.32, ctx.currentTime + 1.5); }
+    }
   }
   function startMusic() {
     if (!ctx || timer) return;
@@ -135,7 +250,7 @@ window.PFAudio = (() => {
     timer = setInterval(scheduler, 50);
     musicBus.gain.cancelScheduledValues(ctx.currentTime);
     musicBus.gain.setValueAtTime(musicBus.gain.value, ctx.currentTime);
-    musicBus.gain.linearRampToValueAtTime(0.32, ctx.currentTime + 4);
+    musicBus.gain.linearRampToValueAtTime(mode === 'boss' ? 0.4 : 0.32, ctx.currentTime + (mode === 'boss' ? 1 : 4));
   }
   function stopMusic() {
     if (!ctx || !timer) return;
@@ -190,15 +305,26 @@ window.PFAudio = (() => {
     lose: t => { tone(mtof(71), t, { type: 'triangle', dur: 0.22, gain: 0.2 }); tone(mtof(67), t + 0.16, { type: 'triangle', dur: 0.22, gain: 0.2 }); tone(mtof(62), t + 0.32, { type: 'triangle', dur: 0.5, gain: 0.2, verb: 0.3 }); },
     opened: t => { tone(1320, t, { dur: 0.5, gain: 0.13, verb: 0.35 }); tone(1980, t + 0.07, { dur: 0.6, gain: 0.09, verb: 0.35 }); },
     turn: t => { tone(mtof(76), t, { dur: 0.35, gain: 0.1, verb: 0.3 }); tone(mtof(83), t + 0.1, { dur: 0.45, gain: 0.08, verb: 0.3 }); },
-    // The Algorithm
-    bossSiren: t => { for (let i = 0; i < 3; i++) { tone(620, t + i * 0.7, { type: 'sawtooth', dur: 0.35, gain: 0.12, to: 940, filter: 2200, verb: 0.2 }); tone(940, t + i * 0.7 + 0.35, { type: 'sawtooth', dur: 0.35, gain: 0.12, to: 620, filter: 2200, verb: 0.2 }); } },
-    bossSlam: t => { tone(90, t, { dur: 0.9, gain: 0.5, to: 30, verb: 0.3 }); whoosh(t, 2200, 120, 0.8, 0.45); },
-    bossCharge: t => { tone(180, t, { type: 'sawtooth', dur: 1.25, gain: 0.08, to: 900, filter: 1600 }); tone(1200, t + 1.25, { type: 'square', dur: 0.5, gain: 0.05, to: 1100, filter: 2500 }); },
-    bossCrack: t => { whoosh(t + 1.1, 3000, 300, 0.4, 0.4); tone(70, t + 1.15, { dur: 0.5, gain: 0.4, to: 35, verb: 0.2 }); },
-    bossRain: t => { tone(1600, t, { type: 'sine', dur: 1.4, gain: 0.07, to: 300 }); whoosh(t + 1.45, 1800, 200, 0.35, 0.35); },
-    bossDoom: t => { tone(55, t, { type: 'sawtooth', dur: 3.2, gain: 0.12, to: 40, filter: 400, verb: 0.4 }); },
+    // ---------- The Algorithm (each takes (time, options)) ----------
+    bossSiren: t => { for (let i = 0; i < 3; i++) { tone(620, t + i * 0.7, { type: 'sawtooth', dur: 0.35, gain: 0.2, to: 940, filter: 2200, verb: 0.2 }); tone(940, t + i * 0.7 + 0.35, { type: 'sawtooth', dur: 0.35, gain: 0.2, to: 620, filter: 2200, verb: 0.2 }); } },
+    bossRiser: (t, o) => { const d = Math.max(1, o.dur || 6); whoosh(t, 150, 5000, d, 0.32); tone(80, t, { type: 'sawtooth', dur: d, gain: 0.07, to: 640, filter: 1400, attack: d * 0.8, verb: 0.3 }); },
+    bossFall: t => { tone(3200, t, { type: 'sine', dur: 1.4, gain: 0.09, to: 260, verb: 0.3 }); whoosh(t + 0.8, 400, 3000, 0.6, 0.3); },
+    bossSlam: t => { tone(110, t, { dur: 1.4, gain: 0.6, to: 24, verb: 0.4 }); tone(55, t, { dur: 1.6, gain: 0.4, to: 22 }); whoosh(t, 4000, 90, 1.2, 0.55); const c = noise(), f = ctx.createBiquadFilter(), e = ctx.createGain(); f.type = 'highpass'; f.frequency.value = 3000; e.gain.setValueAtTime(0.18, t); e.gain.exponentialRampToValueAtTime(0.001, t + 2); c.connect(f).connect(e).connect(sfxBus); e.connect(reverb); c.start(t); c.stop(t + 2); },
+    bossRoar: t => { for (const [f0, det] of [[62, 0], [64, 8], [93, -5]]) { const oo = ctx.createOscillator(), e = ctx.createGain(), fl = ctx.createBiquadFilter(), vib = ctx.createOscillator(), va = ctx.createGain(); oo.type = 'sawtooth'; oo.frequency.value = f0; oo.detune.value = det; vib.frequency.value = 7; va.gain.value = 9; vib.connect(va).connect(oo.frequency); fl.type = 'lowpass'; fl.frequency.setValueAtTime(250, t); fl.frequency.linearRampToValueAtTime(1600, t + 0.6); fl.frequency.linearRampToValueAtTime(300, t + 1.7); e.gain.setValueAtTime(0, t); e.gain.linearRampToValueAtTime(0.16, t + 0.25); e.gain.exponentialRampToValueAtTime(0.001, t + 1.8); oo.connect(fl).connect(e).connect(sfxBus); e.connect(reverb); oo.start(t); oo.stop(t + 1.85); vib.start(t); vib.stop(t + 1.85); } whoosh(t, 300, 900, 1.4, 0.25); },
+    bossCharge: (t, o) => { const d = Math.max(0.3, o.dur || 1.2); tone(140, t, { type: 'sawtooth', dur: d, gain: 0.15, to: 1400, filter: 2600, attack: d * 0.9 }); whoosh(t, 300, 6000, d, 0.12); },
+    bossBlast: t => { tone(1100, t, { type: 'square', dur: 0.45, gain: 0.12, to: 110, filter: 3000 }); tone(70, t, { dur: 0.6, gain: 0.4, to: 30 }); whoosh(t, 5000, 600, 0.35, 0.4); },
+    bossHum: (t, o) => { const d = Math.max(0.3, o.dur || 2); for (const f0 of [110, 113.5, 221]) { const oo = ctx.createOscillator(), e = ctx.createGain(), fl = ctx.createBiquadFilter(), trem = ctx.createOscillator(), ta = ctx.createGain(); oo.type = 'sawtooth'; oo.frequency.value = f0; fl.type = 'lowpass'; fl.frequency.value = 1500; trem.frequency.value = 18; ta.gain.value = 0.03; trem.connect(ta).connect(e.gain); e.gain.setValueAtTime(0, t); e.gain.linearRampToValueAtTime(0.06, t + 0.05); e.gain.setValueAtTime(0.06, t + d - 0.1); e.gain.linearRampToValueAtTime(0, t + d); oo.connect(fl).connect(e).connect(sfxBus); oo.start(t); oo.stop(t + d + 0.05); trem.start(t); trem.stop(t + d + 0.05); } },
+    bossPowerDown: t => tone(700, t, { type: 'sawtooth', dur: 0.5, gain: 0.13, to: 50, filter: 1800 }),
+    bossRumble: (t, o) => { const d = Math.max(0.3, o.dur || 1.2); const c = noise(), f = ctx.createBiquadFilter(), e = ctx.createGain(); f.type = 'lowpass'; f.frequency.value = 180; e.gain.setValueAtTime(0, t); e.gain.linearRampToValueAtTime(0.5, t + d); c.connect(f).connect(e).connect(sfxBus); c.start(t); c.stop(t + d + 0.05); tone(42, t, { dur: d, gain: 0.25, attack: d * 0.9 }); },
+    bossStomp: t => { tone(130, t, { dur: 1.1, gain: 0.65, to: 26, verb: 0.35 }); whoosh(t, 1400, 120, 0.7, 0.5); },
+    bossCrackle: t => { for (let k = 0; k < 3; k++) whoosh(t + k * 0.04, 4000, 1500, 0.08, 0.3); tone(90, t, { dur: 0.25, gain: 0.22, to: 40 }); },
+    bossWave: t => whoosh(t, 250, 3000, 0.9, 0.6),
+    bossWhistle: (t, o) => tone(rand(2200, 2800), t, { type: 'sine', dur: Math.max(0.3, o.dur || 1.4), gain: 0.09, to: 380 }),
+    bossImpact: (t, o) => { const g = o.g ?? 1; tone(150, t, { dur: 0.55, gain: 0.4 * g, to: 36, verb: 0.2 }); whoosh(t, 2600, 200, 0.3, 0.35 * g); },
+    bossWarp: (t, o) => { const d = Math.max(1, o.dur || 3.5); tone(48, t, { type: 'sawtooth', dur: d, gain: 0.14, to: 36, filter: 500, attack: 0.5, verb: 0.4 }); whoosh(t, 3000, 120, d, 0.3); tone(400, t, { dur: d, gain: 0.05, to: 90, attack: d * 0.7 }); },
+    bossHurt: t => { tone(240, t, { type: 'square', dur: 0.35, gain: 0.12, to: 60, filter: 1500 }); tone(80, t, { dur: 0.4, gain: 0.35, to: 30 }); whoosh(t, 3000, 400, 0.25, 0.3); },
     bossGrass: t => [76, 81, 86].forEach((n, i) => tone(mtof(n), t + i * 0.06, { type: 'triangle', dur: 0.3, gain: 0.16, verb: 0.3 })),
-    bossDown: t => { [72, 76, 79, 84, 88].forEach((n, i) => tone(mtof(n), t + i * 0.1, { type: 'triangle', dur: 0.6, gain: 0.2, verb: 0.4 })); tone(80, t, { dur: 0.8, gain: 0.4, to: 30 }); },
+    bossDown: t => { [72, 76, 79, 84, 88].forEach((n, i) => tone(mtof(n), t + i * 0.1, { type: 'triangle', dur: 0.6, gain: 0.2, verb: 0.4 })); tone(80, t, { dur: 0.8, gain: 0.4, to: 30 }); whoosh(t, 300, 5000, 1.2, 0.35); },
     bossLeave: t => { whoosh(t, 200, 3000, 1.2, 0.3); tone(300, t, { dur: 1.2, gain: 0.08, to: 900 }); },
     chat: t => { tone(780, t, { type: 'sine', dur: 0.09, gain: 0.12, to: 1150, verb: 0.1 }); },
     click: t => tone(900, t, { type: 'triangle', dur: 0.04, gain: 0.12, verb: 0 }),
@@ -221,12 +347,20 @@ window.PFAudio = (() => {
       lastPlayed[name] = t;
       SFX[name](t + 0.01);
     },
+    // Play a sound effect `delay` seconds from now (used to land boss sounds on the exact hit moment)
+    at(name, delay, opts) {
+      if (!ctx || !prefs.sfx || ctx.state !== 'running' || !SFX[name]) return;
+      if (delay < -0.25) return; // already over
+      SFX[name](ctx.currentTime + Math.max(0.01, delay), opts || {});
+    },
+    // Boss theme: null = back to lo-fi, 0 = warning, 1 = fight, 2 = enraged
+    bossMusic(level) { setBossMusic(level); },
     // Briefly lower the music so a big moment (like game over) stands out
     duck(sec) {
       if (!ctx || !timer) return;
       const g = musicBus.gain, t = ctx.currentTime;
       g.cancelScheduledValues(t); g.setValueAtTime(g.value, t);
-      g.linearRampToValueAtTime(0.06, t + 0.15); g.setValueAtTime(0.06, t + sec); g.linearRampToValueAtTime(0.32, t + sec + 2);
+      g.linearRampToValueAtTime(0.06, t + 0.15); g.setValueAtTime(0.06, t + sec); g.linearRampToValueAtTime(mode === 'boss' ? 0.4 : 0.32, t + sec + 2);
     },
     // Tap race: a bright little pop that climbs a pentatonic scale as your count goes up
     tap(count) {

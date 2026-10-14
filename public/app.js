@@ -1441,7 +1441,13 @@
   syncAudioButtons();
   if (DONATE_URL) { $('donate').href = DONATE_URL; $('donate').hidden = false; }
   $('donate').addEventListener('click', () => sfx('click'));
-  if (window.PFBoss) PFBoss.init({ burst, shake: a => { shake.a = Math.max(shake.a, a); }, sfx, toast, name });
+  if (window.PFBoss) PFBoss.init({
+    burst, shake: a => { shake.a = Math.max(shake.a, a); }, sfx, toast, name,
+    now: () => performance.now() + offset - net.behind,
+    myHead: () => me,
+    at: (n, d, o) => window.PFAudio && PFAudio.at(n, d, o),
+    music: level => window.PFAudio && PFAudio.bossMusic(level),
+  });
   connect();
   requestAnimationFrame(frame);
 })();

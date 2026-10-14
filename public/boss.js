@@ -11,14 +11,45 @@ window.PFBoss = (() => {
 
   function init(a) { api = a; }
   function onSnapshot(m) {
-    const prev = st.phase;
+    const prev = st.phase, wasEnraged = !!st.enraged;
     st = { ...m, attacks: m.attacks || [], grass: m.grass || [] };
     if (prev !== st.phase) onPhase(prev, st.phase);
+    if (st.enraged && !wasEnraged && st.phase === 'active') { api.at('bossRoar', 0); api.shake(10); api.toast('👁️ THE ALGORITHM IS ENRAGED', true); }
+    music();
   }
-  function onAttack(a) { if (!st.attacks.some(x => x.id === a.id)) st.attacks.push(a); if (a.type !== 'slam') api.sfx(a.type === 'beam' ? 'bossCharge' : a.type === 'rain' ? 'bossRain' : a.type === 'doom' ? 'bossDoom' : 'bossCrack'); }
+  // Boss theme follows the fight: warning → fight → enraged, back to lo-fi when it's gone
+  function music() { api.music(st.phase === 'warning' ? 0 : st.phase === 'active' ? (st.enraged ? 2 : 1) : null); }
+  // Each attack's sounds are scheduled on the game clock: wind-up during the warning, impact on the hit
+  function onAttack(a) {
+    if (st.attacks.some(x => x.id === a.id)) return;
+    st.attacks.push(a);
+    const now = api.now(), at = (name, time, o) => api.at(name, (time - now) / 1000, o);
+    if (a.type === 'beam') {
+      at('bossCharge', a.t0, { dur: (a.t1 - a.t0) / 1000 });
+      at('bossBlast', a.t1); at('bossHum', a.t1, { dur: (a.t2 - a.t1) / 1000 }); at('bossPowerDown', a.t2);
+    } else if (a.type === 'stomp') {
+      at('bossRumble', a.t0, { dur: (a.t1 - a.t0) / 1000 }); at('bossStomp', a.t1);
+      a.lines.forEach((_, i) => at('bossCrackle', a.t1 + i * a.step));
+      at('bossWave', a.ringAt);
+    } else if (a.type === 'rain') {
+      const me = api.myHead(), dur = (a.t1 - a.t0) / 1000;
+      for (let i = 0; i < Math.min(3, a.circles.length); i++) at('bossWhistle', a.t0 + i * 120, { dur: dur - i * 0.12 });
+      // louder the closer an impact lands to you
+      const near = me ? Math.min(...a.circles.map(([x, y]) => Math.hypot(x - me.x, y - me.y))) : 800;
+      const g = Math.max(0.35, Math.min(1, 1 - near / 1400));
+      for (let i = 0; i < Math.min(4, a.circles.length); i++) at('bossImpact', a.t1 + i * 45, { g: g * (i ? 0.6 : 1) });
+    } else if (a.type === 'doom') {
+      at('bossWarp', a.t0, { dur: (a.t2 - a.t0) / 1000 });
+    }
+  }
   function onPhase(prev, ph) {
-    if (ph === 'warning') { api.sfx('bossSiren'); api.toast('⚠️ THE ALGORITHM is coming! Get away from the center', true); }
-    else if (ph === 'active' && prev === 'warning') { api.sfx('bossSlam'); api.shake(22); api.burst(0, 0, 60, ['#ff5f7e', '#fff', '#a78bfa', '#ffc93c'], { speed: 520, life: 1000, size: 7 }); }
+    if (ph === 'warning') {
+      api.sfx('bossSiren'); api.toast('⚠️ THE ALGORITHM is coming! Get away from the center', true);
+      // a rising sweep for the whole warning, the incoming whistle, then the crash right on the landing
+      const now = api.now(), until = (st.landAt - now) / 1000;
+      api.at('bossRiser', 0, { dur: until }); api.at('bossFall', until - 1.4); api.at('bossSlam', until);
+    }
+    else if (ph === 'active' && prev === 'warning') { api.shake(22); api.burst(0, 0, 60, ['#ff5f7e', '#fff', '#a78bfa', '#ffc93c'], { speed: 520, life: 1000, size: 7 }); }
     else if (ph === 'leaving') {
       if (st.outcome === 'down') { api.sfx('bossDown'); api.shake(18); api.burst(0, 0, 90, ['#34d399', '#ffc93c', '#fff', '#7dd3fc', '#ff5fa2'], { speed: 620, life: 1400, size: 8, grav: 120 }); api.toast(`🎉 The Algorithm got logged off!${st.by ? ' Last grass: ' + api.name(st.by) : ''}`, true); }
       else { api.sfx('bossLeave'); api.toast('👁️ The Algorithm got bored and left. Back in 3 minutes.'); }
@@ -35,7 +66,7 @@ window.PFBoss = (() => {
       api.burst(e.x, e.y, 26, ['#ff5f7e', '#fff', '#a78bfa'], { speed: 320, life: 650, size: 5 });
       if (e.sid !== mine.sid) return;
       const what = { beam: '👁️ Shadowbanned!', stomp: '💥 Stomped!', rain: '☄️ Ratioed!', slam: '💥 Slammed!', body: '👁️ Bumped the Algorithm!' }[e.atk] || '👁️ Hit!';
-      api.shake(14); api.sfx('crash');
+      api.shake(14); api.sfx('bossHurt');
       if (e.head) api.toast(e.pid === mine.pid ? `${what} −5s and stunned` : `${what} Your head lost 5s`);
       else api.toast(mine.idx >= e.k2 ? `${what} You got split off into a new snake` : `${what} ${e.n} people split off your snake`);
     }
