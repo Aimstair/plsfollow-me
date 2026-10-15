@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const { WebSocketServer } = require('ws');
 const { Game } = require('./src/game');
+const { Stats } = require('./src/stats');
 
 const PORT = Number(process.env.PORT) || 8080;
 const PUB = path.join(__dirname, 'public');
@@ -26,6 +27,7 @@ const CSP = [
 ].join('; ');
 
 const game = new Game();
+const stats = new Stats(process.env.DATA_DIR);
 
 // The page is served with versioned script URLs (app.js?v=<hash>), so every deploy reaches every
 // browser immediately instead of some people running a cached older script.
@@ -83,6 +85,38 @@ function tooMany(ip) {
   list.push(now); orderHits.set(ip, list);
   return list.length > 10;
 }
+const hitTimes = new Map(); // ip -> [timestamps]: at most 60 beacons a minute per visitor
+function hitLimited(ip) {
+  const now = Date.now(), list = (hitTimes.get(ip) || []).filter(t => now - t < 60000);
+  list.push(now); hitTimes.set(ip, list);
+  if (hitTimes.size > 5000) for (const [k, v] of hitTimes) if (now - v[v.length - 1] > 60000) hitTimes.delete(k);
+  return list.length > 60;
+}
+const esc = v => String(v).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
+function statsPage(r, token) {
+  const pct = (a, b) => (b ? Math.round(a / b * 100) + '%' : '–');
+  const table = (title, obj, n = 15) => {
+    const rows = Object.entries(obj).sort((a, b) => b[1] - a[1]), total = rows.reduce((a, [, c]) => a + c, 0);
+    return `<section><h2>${title}</h2>${rows.length ? `<table>${rows.slice(0, n).map(([k, c]) => `<tr><td>${esc(k)}</td><td class=n>${c}</td><td class=n>${pct(c, total)}</td><td class=bar><i style="width:${Math.round(c / rows[0][1] * 100)}%"></i></td></tr>`).join('')}${rows.length > n ? `<tr><td colspan=4 class=muted>+${rows.length - n} more</td></tr>` : ''}</table>` : '<p class=muted>Nothing yet</p>'}</section>`;
+  };
+  const s = r.sum, link = d => `<a href="?token=${encodeURIComponent(token)}&days=${d}"${d === r.days ? ' class=on' : ''}>${d === 1 ? 'Today' : d + ' days'}</a>`;
+  return `<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><meta name=robots content=noindex><title>plsfollow.me stats</title>
+<style>:root{color-scheme:dark}body{margin:0;padding:20px 16px 40px;background:#0a1424;color:#e8eef7;font:14px/1.45 system-ui,sans-serif}main{max-width:1000px;margin:auto}
+h1{font-size:22px;margin:0 0 4px}h2{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#9fb2c8;margin:0 0 8px}.muted{color:#7d8ea3}
+nav{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0 18px}nav a{color:#e8eef7;text-decoration:none;padding:6px 12px;border-radius:999px;border:1px solid #2a3a52}nav a.on{background:#ff5fa2;border-color:#ff5fa2;color:#1a0610;font-weight:700}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:18px}.card{background:#111e33;border:1px solid #22324a;border-radius:14px;padding:12px}.card b{display:block;font-size:24px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}section{background:#111e33;border:1px solid #22324a;border-radius:14px;padding:12px 14px;overflow-x:auto}
+table{width:100%;border-collapse:collapse}td,th{padding:4px 6px;text-align:left;white-space:nowrap}th{color:#9fb2c8;font-weight:600;font-size:12px}.n{text-align:right;font-variant-numeric:tabular-nums}
+td.bar{width:30%}.bar i{display:block;height:6px;border-radius:3px;background:#ff5fa2}td:first-child{max-width:260px;overflow:hidden;text-overflow:ellipsis}</style></head><body><main>
+<h1>plsfollow.me traffic</h1><div class=muted>Days run midnight to midnight ${esc(r.tz)} time. Visitors are counted once per day per browser; bots and crawlers are skipped.</div>
+<nav>${[1, 7, 30, 90].map(link).join('')}</nav>
+<div class=cards><div class=card><b>${s.visitors}</b>visitors</div><div class=card><b>${s.visits}</b>visits</div><div class=card><b>${pct(s.join, s.visitors)}</b>joined the game</div>
+<div class=card><b>${pct(s.spectate, s.visitors)}</b>spectated</div><div class=card><b>${pct(s.bounced, s.visitors)}</b>left without playing</div><div class=card><b>${pct(s.returning, s.visitors)}</b>returning</div></div>
+<div class=grid>${table('Where they came from', s.sources)}${table('Countries (from timezone)', s.countries)}${table('Campaigns (utm source / medium / campaign)', s.campaigns)}${table('Invite links', s.invites)}${table('Devices', s.devices)}${table('Languages', s.langs)}</div>
+<section style="margin-top:14px"><h2>By day</h2><table><tr><th>Day</th><th class=n>Visitors</th><th class=n>Visits</th><th class=n>Joined</th><th class=n>Spectated</th><th class=n>Shared</th><th class=n>Opened “Become a bot”</th><th class=n>Left without playing</th><th class=n>Returning</th></tr>
+${r.rows.map(d => `<tr><td>${d.day}</td><td class=n>${d.visitors}</td><td class=n>${d.visits}</td><td class=n>${d.join}</td><td class=n>${d.spectate}</td><td class=n>${d.share}</td><td class=n>${d.bot}</td><td class=n>${d.bounced}</td><td class=n>${d.returning}</td></tr>`).join('') || '<tr><td colspan=9 class=muted>No visits yet</td></tr>'}</table></section>
+</main></body></html>`;
+}
 const adminOk = token => {
   const want = process.env.ADMIN_TOKEN || '';
   return !!want && typeof token === 'string' && token.length === want.length && crypto.timingSafeEqual(Buffer.from(token), Buffer.from(want));
@@ -110,6 +144,23 @@ async function handleApi(req, res, url) {
       if (o) { game.house.addPaid(o); console.log(`paid bot active: @${o.handle} (${o.platform}) until ${new Date(o.expiresAt).toISOString()}`); }
       return json(res, 200, { received: true });
     } catch (e) { return json(res, 400, { error: e.message }); }
+  }
+  // Traffic beacons from the page (sent with sendBeacon, so the body is plain text JSON)
+  if (p === '/api/hit' && req.method === 'POST') {
+    if (hitLimited(ip)) { res.writeHead(204); res.end(); return; }
+    let body = null; try { body = JSON.parse(await readBody(req, 2048)); } catch { /* ignore junk */ }
+    stats.hit(body, String(req.headers['user-agent'] || ''), String(req.headers.host || '').replace(/^www\./, '').replace(/:\d+$/, ''));
+    res.writeHead(204, { 'Cache-Control': 'no-store' }); res.end(); return;
+  }
+  // Admin: /admin/stats?token=...&days=30 (add &format=json for raw numbers)
+  if (p === '/admin/stats' && req.method === 'GET') {
+    if (!adminOk(url.searchParams.get('token'))) return json(res, 403, { error: 'forbidden' });
+    const r = stats.report(Math.max(1, Math.min(120, Number(url.searchParams.get('days')) || 30)));
+    if (url.searchParams.get('format') === 'json') return json(res, 200, r);
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex', 'Referrer-Policy': 'no-referrer',
+      'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'" });
+    res.end(statsPage(r, url.searchParams.get('token')));
+    return;
   }
   // Admin: /admin/bots?token=... lists paid bots; add &remove=<id> to take one down
   if (p === '/admin/bots' && req.method === 'GET') {
@@ -173,6 +224,6 @@ server.on('upgrade', (req, socket, head) => {
 
 server.listen(PORT, () => console.log(`plsfollow.me listening on http://localhost:${PORT}`));
 
-function shutdown() { game.stop(); wss.clients.forEach(ws => ws.close(1012, 'restarting')); server.close(() => process.exit(0)); setTimeout(() => process.exit(0), 2000).unref(); }
+function shutdown() { stats.save(); game.stop(); wss.clients.forEach(ws => ws.close(1012, 'restarting')); server.close(() => process.exit(0)); setTimeout(() => process.exit(0), 2000).unref(); }
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);

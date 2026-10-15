@@ -1026,7 +1026,7 @@
   }
   function startSpectate() {
     if (window.PFAudio) PFAudio.unlock();
-    spectating = true; const t = specTargets()[0]; specKey = t ? t.key : 0;
+    spectating = true; track('spectate'); const t = specTargets()[0]; specKey = t ? t.key : 0;
     $('intro').hidden = true; $('spec').hidden = false; specRender(true);
   }
   function stopSpectate(toMenu = true) {
@@ -1084,6 +1084,7 @@
     av.style.setProperty('--c', 'hsl(330,85%,62%)');
     $('botErr').hidden = true; $('botPay').disabled = !handle;
     $('botModal').hidden = false;
+    track('bot');
   }
   $('botBtn').addEventListener('click', openBotModal);
   $('botClose').addEventListener('click', () => { $('botModal').hidden = true; });
@@ -1200,6 +1201,7 @@
   }
   let greetPending = false;
   function onJoined() {
+    track('join');
     if (spectating) stopSpectate(false);
     $('intro').hidden = true; $('bottom').hidden = false; $('joinBtn').disabled = false;
     greetPending = true; // greeted on the first frame that shows us in a snake
@@ -1365,6 +1367,7 @@
     shareSnake = { members: mine.members.map(p => ({ ...p })) };
     $('caption').value = makeCaption(mine);
     $('shareModal').hidden = false;
+    track('share');
     await renderShare();
   });
   $('shareThemes').addEventListener('click', e => {
@@ -1481,6 +1484,29 @@
     at: (n, d, o) => window.PFAudio && PFAudio.at(n, d, o),
     music: (level, kind) => window.PFAudio && PFAudio.bossMusic(level, kind),
   });
+  // ---------- Traffic stats ----------
+  // One beacon per page view (where the visit came from), then one per first join/spectate/share/bot sheet.
+  // The visitor id is random and only lives in this browser; the server stores no IPs.
+  const visitor = (() => {
+    const day = new Date().toISOString().slice(0, 10);
+    let v = null; try { v = JSON.parse(localStorage.getItem('pf-vid') || 'null'); } catch { /* storage blocked */ }
+    const ret = !!(v && v.first && v.first !== day);
+    if (!v || !v.id) { v = { id: Math.random().toString(36).slice(2, 12) + Date.now().toString(36).slice(-6), first: day }; try { localStorage.setItem('pf-vid', JSON.stringify(v)); } catch { /* storage blocked */ } }
+    return { id: v.id, ret };
+  })();
+  const sentEvents = new Set();
+  function track(e) {
+    if (e && sentEvents.has(e)) return; if (e) sentEvents.add(e);
+    const q = new URLSearchParams(location.search), inv = location.pathname.match(/^\/@([A-Za-z0-9._-]{1,30})$/);
+    const body = JSON.stringify(e ? { vid: visitor.id, e } : {
+      vid: visitor.id, ret: visitor.ret ? 1 : 0, ref: document.referrer || '', invite: inv ? inv[1] : '',
+      utm: { source: q.get('utm_source') || '', medium: q.get('utm_medium') || '', campaign: q.get('utm_campaign') || '' },
+      tz: (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { return ''; } })(), lang: navigator.language || '',
+    });
+    try { if (!(navigator.sendBeacon && navigator.sendBeacon('/api/hit', body))) fetch('/api/hit', { method: 'POST', body, keepalive: true }).catch(() => {}); } catch { /* offline */ }
+  }
+  track();
+
   connect();
   requestAnimationFrame(frame);
 })();

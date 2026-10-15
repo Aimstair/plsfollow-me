@@ -35,6 +35,7 @@ It prints messages received, race taps accepted/rejected, and the server's tick 
 | `public/boss.js` | Draws each boss, its warnings and attacks, tokens, the boss bar and minimap marker, and times its sounds |
 | `src/paid.js` | Paid bots: $5 Stripe Checkout, signed webhook, 30-day orders saved to `DATA_DIR` |
 | `src/fame.js` | Today's spotlight hall of fame (most-opened profiles), saved to `DATA_DIR` |
+| `src/stats.js` | Traffic stats: sources (referrer or in-app browser), utm campaigns, invite links, countries (from timezone), devices, and joins/spectates per day. No cookies or IPs stored; saved to `DATA_DIR/stats.json` for 120 days |
 | `src/game.js` | Authoritative 20 Hz simulation: snakes, turns, races, steals, bites, trolls, binary state encoding |
 | `public/index.html` | Markup and styles |
 | `public/app.js` | Client: interpolation, rendering, input, race pad, spotlight card, share card |
@@ -79,6 +80,13 @@ Players can pay to have a bot play as their profile for 30 days (tagged ✦ prom
    (add `&remove=<id>` to take one down).
 
 Until the Stripe keys are set, the button explains that payments aren't set up yet.
+
+## Traffic stats
+
+`https://plsfollow.me/admin/stats?token=<ADMIN_TOKEN>` shows visitors per day, where they came from,
+utm campaigns, invite links, countries, devices, and how many joined, spectated or left without playing.
+Add `&days=7` (up to 120) or `&format=json`. Tag share links like `https://plsfollow.me/?utm_source=threads&utm_campaign=launch`
+to tell campaigns apart. Days follow `STATS_TZ` (default `Asia/Manila`).
 
 ## Limits to know about
 
