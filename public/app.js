@@ -120,7 +120,7 @@
     const ns = v.getUint16(o, true); o += 2;
     const snakes = [], pos = new Map(), byId = new Map();
     for (let i = 0; i < ns; i++) {
-      const s = { id: v.getUint16(o, true), left: v.getUint16(o + 4, true) * 10, boost: !!(v.getUint8(o + 6) & 1), turn: v.getUint8(o + 7), angle: v.getInt16(o + 8, true) / 5000, members: [] };
+      const s = { id: v.getUint16(o, true), left: v.getUint16(o + 4, true) * 10, boost: !!(v.getUint8(o + 6) & 1), shield: (v.getUint8(o + 6) & 6) >> 1, turn: v.getUint8(o + 7), angle: v.getInt16(o + 8, true) / 5000, members: [] };
       const len = v.getUint16(o + 2, true); o += 10;
       for (let k = 0; k < len; k++) {
         const m = { x: v.getInt16(o, true), y: v.getInt16(o + 2, true), pid: v.getUint32(o + 4, true) }; o += 8;
@@ -149,7 +149,7 @@
     const snakes = b.snakes.map(s => {
       const sa = a.byId.get(s.id);
       return {
-        id: s.id, turn: s.turn, boost: s.boost, angle: sa ? lerpAng(sa.angle, s.angle, k) : s.angle,
+        id: s.id, turn: s.turn, boost: s.boost, shield: s.shield, angle: sa ? lerpAng(sa.angle, s.angle, k) : s.angle,
         left: Math.max(0, Math.min(LEAD_MS, s.left - (rst - b.st))),
         members: s.members.map(m => { const q = mix(a.pos.get(m.pid), m); q.pid = m.pid; return q; }),
       };
@@ -257,7 +257,7 @@
     } else if (e.k === 'steal') {
       burst(e.x, e.y, 30, ['#ff5fa2', '#ffc93c', '#fff'], { speed: 320, life: 750, size: 5 });
       if (e.victim === me0.sid && me0.idx >= e.k2) { shake.a = 12; sfx('robbed'); toast(`🫳 Another snake stole you (and ${e.n - 1} others)!`); }
-      else if (e.thief === me0.sid) { sfx('yoink', { n: e.n }); toast(`😈 Your snake stole ${e.n} people!`); }
+      else if (e.thief === me0.sid) { sfx('yoink', { n: e.n }); if (me0.idx === 0) { sfx('boost'); shake.a = Math.max(shake.a, 5); } toast(`😈 Your snake stole ${e.n} people! ⚡ Speed burst`); }
       else if (e.victim === me0.sid) { shake.a = 16; sfx('robbed'); knockFx(e.hx, e.hy); toast(`😱 Your snake lost ${e.n} people to a thief!`); }
       else sfxAt('yoink', e.x, e.y, { n: e.n });
       if (e.victim !== me0.sid) knockFx(e.hx, e.hy, true);
@@ -649,6 +649,28 @@
     c.restore();
   }
 
+  // Shield: a shimmering bubble on the head and a thin outline on the body while the snake can't be hurt
+  // (just stole, just got hit or robbed, just spawned). Silver = safe from other snakes and trolls, cyan = safe from the boss only.
+  function drawShield(s) {
+    const h = s.members[0], t = now / 1000, col = s.shield & 1 ? '226,236,250' : '125,211,252';
+    if (!inView(h.x, h.y, 200)) return;
+    ctx.save();
+    ctx.lineWidth = 2.5; ctx.strokeStyle = `rgba(${col},.5)`;
+    for (let i = 1; i < s.members.length; i++) { const p = s.members[i]; if (!inView(p.x, p.y, 40)) continue; ctx.beginPath(); ctx.arc(p.x, p.y, 20, 0, TAU); ctx.stroke(); }
+    const r = HEAD_R + 17 + Math.sin(t * 9) * 1.5;
+    const g = ctx.createRadialGradient(h.x, h.y, r * .55, h.x, h.y, r);
+    g.addColorStop(0, `rgba(${col},0)`); g.addColorStop(.7, `rgba(${col},.22)`); g.addColorStop(1, `rgba(${col},.6)`);
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(h.x, h.y, r, 0, TAU); ctx.fill();
+    ctx.lineWidth = 3.5; ctx.strokeStyle = `rgba(${col},1)`;
+    ctx.setLineDash([12, 6]); ctx.lineDashOffset = -t * 40;
+    ctx.beginPath(); ctx.arc(h.x, h.y, r, 0, TAU); ctx.stroke(); ctx.setLineDash([]);
+    // a glint sweeping around the bubble
+    const ga = t * 4;
+    ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.arc(h.x, h.y, r, ga, ga + .5); ctx.stroke();
+    ctx.restore();
+  }
+
   function drawHead(s, h) {
     const a = s.angle;
     ctx.globalAlpha = .55; ctx.drawImage(glow('255,201,60'), h.x - 80, h.y - 80, 160, 160); ctx.globalAlpha = 1;
@@ -774,6 +796,7 @@
       }
     }
     for (const s of view.snakes) { const h = s.members[0]; if (inView(h.x, h.y, 120)) drawHead(s, h); }
+    for (const s of view.snakes) if (s.shield) drawShield(s);
     if (window.PFBoss) PFBoss.drawTop(ctx, bossNow, focus);
     drawRings();
 

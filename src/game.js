@@ -17,6 +17,7 @@ const CFG = {
   SOLO_MS: 30000, BUMP_COST_MS: 5000, // a head with no tail has 30s to get one; head bumps between two of them cost 5s each
   GRACE_MS: 1500, STEAL_GRACE_MS: 800,
   BOOST_MS: 3000, BOOST: 1.6, BOLT_HIT: 32,
+  STEAL_BOOST_MS: 1500, STEAL_BOOST: 1.35, // a short burst of speed after stealing a tail
   // Ten trolls wander the map at random, keeping apart. Head bump: the leader loses time.
   // Body hit: the snake breaks. A head with no tail gets knocked out.
   TROLL_COUNT: 10, TROLL_APART: 0.4, // keep at least this fraction of the arena radius between trolls
@@ -69,7 +70,7 @@ class Game {
   // ---------- Players and snakes ----------
   makeSnake(members) {
     const id = this.sidSeq; this.sidSeq = (this.sidSeq % 65535) + 1;
-    const s = { id, members, grace: this.now + CFG.GRACE_MS, turn: 0, leaderSince: 0, boostUntil: 0, race: null };
+    const s = { id, members, grace: this.now + CFG.GRACE_MS, turn: 0, leaderSince: 0, boostUntil: 0, dashUntil: 0, race: null };
     this.snakes.push(s); this.promote(s);
     return s;
   }
@@ -86,7 +87,7 @@ class Game {
     const h = s.members[0], n = s.members[1];
     if (n) h.angle = Math.atan2(h.y - n.y, h.x - n.x);
     h.target = h.angle;
-    s.leaderSince = this.now; s.boostUntil = 0; s.turn = (s.turn + 1) & 255;
+    s.leaderSince = this.now; s.boostUntil = 0; s.dashUntil = 0; s.turn = (s.turn + 1) & 255;
     s.path = null; // new head: the trail starts again from the body as it is now
     // Leading real people counts toward the hall of fame
     if (h.handle && s.members.length > 1) this.fame.led(h.handle, h.platform, s.members.length);
@@ -343,7 +344,7 @@ class Game {
   }
 
   move(s, dt) {
-    const m = s.members, h = m[0], sp = CFG.SPEED * (this.now < s.boostUntil ? CFG.BOOST : 1) * (h.ace ? CFG.ACE_SPEED : 1);
+    const m = s.members, h = m[0], sp = CFG.SPEED * (this.now < s.boostUntil ? CFG.BOOST : this.now < (s.dashUntil || 0) ? CFG.STEAL_BOOST : 1) * (h.ace ? CFG.ACE_SPEED : 1);
     // Humans steer; a head with no recent input (tab hidden, dropped) goes on autopilot
     if (h.bot) this.house.steer(s, h);
     else if (this.now - h.lastSteer > CFG.AUTOPILOT_MS) this.wander(h);
@@ -410,6 +411,7 @@ class Game {
         const tail = t.members.splice(hit.k);
         s.members.push(...tail);
         s.grace = this.now + CFG.STEAL_GRACE_MS;
+        s.dashUntil = this.now + CFG.STEAL_BOOST_MS;
         // Knockback: the robbed snake's head gets shoved away from the thief and briefly can't steer
         const vh = t.members[0];
         let kx = 0, ky = 0;
@@ -677,7 +679,8 @@ class Game {
       const left = Math.max(0, CFG.LEAD_MS - (this.now - s.leaderSince));
       o = buf.writeUInt16LE(s.id, o); o = buf.writeUInt16LE(s.members.length, o);
       o = buf.writeUInt16LE(Math.min(65535, Math.ceil(left / 10)), o);
-      o = buf.writeUInt8(this.now < s.boostUntil ? 1 : 0, o); o = buf.writeUInt8(s.turn, o);
+      // flags: 1 = speed boost (bolt or steal burst), 2 = can't be stolen from/bumped right now, 4 = safe from the boss right now
+      o = buf.writeUInt8((this.now < s.boostUntil || this.now < (s.dashUntil || 0) ? 1 : 0) | (this.now < s.grace ? 2 : 0) | (this.now < (s.bossGrace || 0) ? 4 : 0), o); o = buf.writeUInt8(s.turn, o);
       const a = Math.atan2(Math.sin(s.members[0].angle), Math.cos(s.members[0].angle));
       o = buf.writeInt16LE(Math.round(a * 5000), o);
       for (const p of s.members) { o = buf.writeInt16LE(i16(p.x), o); o = buf.writeInt16LE(i16(p.y), o); o = buf.writeUInt32LE(p.pid, o); }

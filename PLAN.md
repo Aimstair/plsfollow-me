@@ -20,6 +20,7 @@ right away, and produce moments worth screenshotting and sharing.
 | AFK | A head that sends no input for 1s goes on autopilot (wanders, avoids walls). After 8s idle, leadership passes to the next active human. |
 | Self-bite | If the head touches its own body (segment ≥ 10), the snake splits. Everything behind the bite becomes a new snake, and the bitten segment becomes its head. |
 | Steal | If a head touches another snake's body at segment k, everything from k to the tail is taken and attached to the attacker's tail. |
+| Steal burst & shields | A steal gives the thief a 1.5s speed burst (×1.35). Any snake that can't be hurt right now (just stole, just got robbed, bumped, hit by a troll or the boss, or just formed) shows a shield: a dashed bubble on the head and a thin outline on the body. Silver = safe from other snakes and trolls; cyan = safe from the boss only. |
 | Head-on | The bigger snake captures the other head. Two heads with no tails instead bump: both lose 5s and bounce apart. |
 | No tail | A head with no tail has 30s to get one (steal from a body, or get captured into a bigger snake). The clock pauses while nobody else is in the arena. Out of time: game over, unless another player bumped you since you went solo, in which case you join that player's tail. |
 | Grace | A snake that just split or stole cannot collide for 1–1.5s. This prevents chain reactions. |
