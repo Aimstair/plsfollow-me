@@ -20,7 +20,7 @@ const CFG = {
   STEAL_BOOST_MS: 1500, STEAL_BOOST: 1.35, // a short burst of speed after stealing a tail
   // Ten trolls wander the map at random, keeping apart. Head bump: the leader loses time.
   // Body hit: the snake breaks. A head with no tail gets knocked out.
-  TROLL_COUNT: 10, TROLL_APART: 0.4, // keep at least this fraction of the arena radius between trolls
+  TROLL_COUNT: 20, TROLL_APART: 0.28, // keep at least this fraction of the arena radius between trolls
   CHAT_MAX: 80, CHAT_GAP_MS: 1200,
   TROLL_SPEED: 90, TROLL_TURN: 2,
   TROLL_HEAD_HIT: 36, TROLL_BODY_HIT: 31, TROLL_COOL_MS: 4000, TROLL_TIME_COST_MS: 5000,
