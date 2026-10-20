@@ -30,7 +30,7 @@ It prints messages received, race taps accepted/rejected, and the server's tick 
 | Path | What it is |
 |---|---|
 | `server.js` | HTTP static files, `/healthz`, avatar images at `/a/<boot>/<pid>`, WebSocket at `/ws` |
-| `src/house.js` | Host accounts played by the server (edit `GROUPS` at the top to change them) |
+| `src/house.js` | Host accounts played by the server (edit `GROUPS` at the top to change them). Off unless `BOTS=on` is set; paid bots too |
 | `src/boss.js` | The 3 bosses (Algorithm, Influencer, Comment Section): cycle, telegraphed attacks, hits, fight-back tokens (`BOSS_FIRST_MS` shortens the first landing and `BOSS_KIND` forces one boss, both for local testing) |
 | `public/boss.js` | Draws each boss, its warnings and attacks, tokens, the boss bar and minimap marker, and times its sounds |
 | `src/paid.js` | Paid bots: $5 Stripe Checkout, signed webhook, 30-day orders saved to `DATA_DIR` |

@@ -54,6 +54,8 @@ const CHAT_PERSONAL_MS = [35000, 80000]; // each host waits at least this long b
 const RESPAWN_MS = 8000;      // back in the game this long after being knocked out
 const AWAY_MS = 45000;
 const ACE_AWAY_MS = 15000;    // the ace doesn't sit in someone else's tail for long: it breaks out and leads        // a host stuck in another host's snake leaves after this, then respawns home
+// Bots are switched off for now. Set BOTS=on (e.g. `fly secrets set BOTS=on`) to bring them all back.
+const ENABLED = process.env.BOTS === 'on';
 const TAU = Math.PI * 2;
 const rand = (a, b) => a + Math.random() * (b - a);
 
@@ -92,6 +94,12 @@ class House {
   // Called every tick: respawn knocked-out hosts, send wanderers home
   tick() {
     const g = this.g;
+    if (!ENABLED) {
+      for (const slot of this.slots) if (slot.player && g.players.has(slot.player.pid)) g.eliminate(slot.player, 'leave');
+      for (const slot of this.slots) slot.player = null;
+      this.queue.length = 0;
+      return;
+    }
     this.chatTick();
     // Paid bots whose 30 days are up (or that were removed) leave the arena
     for (const slot of this.slots.slice()) {
