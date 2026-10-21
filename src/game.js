@@ -18,6 +18,8 @@ const CFG = {
   GRACE_MS: 1500, STEAL_GRACE_MS: 800,
   BOOST_MS: 3000, BOOST: 1.6, BOLT_HIT: 32,
   STEAL_BOOST_MS: 1500, STEAL_BOOST: 1.35, // a short burst of speed after stealing a tail
+  HEAD_DASH_MS: 350, HEAD_DASH: 1.9, HEAD_DASH_COOL_MS: 1000, // the head clicks for a mini dash, once a second
+  BREAK_TAPS: 100, // a player in a tail who taps this many times (in the same snake) breaks free and leads alone
   // Ten trolls wander the map at random, keeping apart. Head bump: the leader loses time.
   // Body hit: the snake breaks. A head with no tail gets knocked out.
   TROLL_COUNT: 20, TROLL_APART: 0.28, // keep at least this fraction of the arena radius between trolls
@@ -70,7 +72,7 @@ class Game {
   // ---------- Players and snakes ----------
   makeSnake(members) {
     const id = this.sidSeq; this.sidSeq = (this.sidSeq % 65535) + 1;
-    const s = { id, members, grace: this.now + CFG.GRACE_MS, turn: 0, leaderSince: 0, boostUntil: 0, dashUntil: 0, race: null };
+    const s = { id, members, grace: this.now + CFG.GRACE_MS, turn: 0, leaderSince: 0, boostUntil: 0, dashUntil: 0, miniUntil: 0, miniReady: 0, race: null };
     this.snakes.push(s); this.promote(s);
     return s;
   }
@@ -87,7 +89,7 @@ class Game {
     const h = s.members[0], n = s.members[1];
     if (n) h.angle = Math.atan2(h.y - n.y, h.x - n.x);
     h.target = h.angle;
-    s.leaderSince = this.now; s.boostUntil = 0; s.dashUntil = 0; s.turn = (s.turn + 1) & 255;
+    s.leaderSince = this.now; s.boostUntil = 0; s.dashUntil = 0; s.miniUntil = 0; s.miniReady = 0; s.turn = (s.turn + 1) & 255;
     s.path = null; // new head: the trail starts again from the body as it is now
     // Leading real people counts toward the hall of fame
     if (h.handle && s.members.length > 1) this.fame.led(h.handle, h.platform, s.members.length);
@@ -344,7 +346,8 @@ class Game {
   }
 
   move(s, dt) {
-    const m = s.members, h = m[0], sp = CFG.SPEED * (this.now < s.boostUntil ? CFG.BOOST : this.now < (s.dashUntil || 0) ? CFG.STEAL_BOOST : 1) * (h.ace ? CFG.ACE_SPEED : 1);
+    const m = s.members, h = m[0];
+    const sp = CFG.SPEED * Math.max(this.now < s.boostUntil ? CFG.BOOST : 1, this.now < (s.dashUntil || 0) ? CFG.STEAL_BOOST : 1, this.now < (s.miniUntil || 0) ? CFG.HEAD_DASH : 1) * (h.ace ? CFG.ACE_SPEED : 1);
     // Humans steer; a head with no recent input (tab hidden, dropped) goes on autopilot
     if (h.bot) this.house.steer(s, h);
     else if (this.now - h.lastSteer > CFG.AUTOPILOT_MS) this.wander(h);
@@ -450,6 +453,33 @@ class Game {
     const add = Math.min(n, Math.floor(e.budget));
     if (add <= 0) return;
     e.budget -= add; e.n += add; e.at = this.now; r.dirty = true;
+    // Break-free counter: people (not bots) who keep tapping in the same snake eventually escape it
+    if (p.bot) return;
+    if (p.freeSid !== s.id) { p.freeSid = s.id; p.freeN = 0; }
+    p.freeN += add;
+    if (p.freeN >= CFG.BREAK_TAPS) this.breakFree(p, s);
+  }
+
+  // Leave the tail right where you are and lead a snake of your own
+  breakFree(p, s) {
+    const i = s.members.indexOf(p); if (i <= 0) return;
+    const prev = s.members[i - 1];
+    s.members.splice(i, 1);
+    s.race.entries.delete(p.pid); s.race.dirty = true;
+    p.angle = p.target = Math.atan2(p.y - prev.y, p.x - prev.x) + rand(-0.5, 0.5);
+    p.lastSteer = this.now;
+    const ns = this.makeSnake([p]);
+    p.freeSid = ns.id; p.freeN = 0;
+    this.event({ k: 'free', pid: p.pid, from: s.id, sid: ns.id, x: Math.round(p.x), y: Math.round(p.y) });
+  }
+
+  // The head clicks for a mini dash: a short burst of speed, at most once per HEAD_DASH_COOL_MS
+  dash(c) {
+    const p = c.player; if (!p) return;
+    const s = this.snakeOf(p);
+    if (!s || s.members[0] !== p || this.now < (s.miniReady || 0)) return;
+    s.miniUntil = this.now + CFG.HEAD_DASH_MS; s.miniReady = this.now + CFG.HEAD_DASH_COOL_MS;
+    this.event({ k: 'dash', sid: s.id, pid: p.pid, x: Math.round(p.x), y: Math.round(p.y) });
   }
 
   flushRaceBoards() {
@@ -460,7 +490,7 @@ class Game {
       for (const p of s.members) if (p.client) {
         // each racer also learns their own count as the server sees it
         const e = r.entries.get(p.pid);
-        this.sendRaw(p.client, e ? msg.slice(0, -1) + `,"mine":${e.n}}` : msg);
+        this.sendRaw(p.client, e ? msg.slice(0, -1) + `,"mine":${e.n},"free":${p.freeSid === s.id ? p.freeN || 0 : 0}}` : msg);
       }
     }
   }
@@ -469,7 +499,7 @@ class Game {
   connect(ws, ip) {
     const c = { ws, ip: ip || '?', player: null, rtt: 300, pingAt: 0, alive: true, opened: new Set(), bucket: 40, bucketAt: Date.now() };
     this.clients.add(c);
-    this.send(c, { t: 'hello', boot: this.boot, now: Date.now(), cfg: { LEAD_MS: CFG.LEAD_MS, RACE_MS: CFG.RACE_MS, TICK_MS: CFG.TICK_MS } });
+    this.send(c, { t: 'hello', boot: this.boot, now: Date.now(), cfg: { LEAD_MS: CFG.LEAD_MS, RACE_MS: CFG.RACE_MS, TICK_MS: CFG.TICK_MS, BREAK_TAPS: CFG.BREAK_TAPS, DASH_COOL_MS: CFG.HEAD_DASH_COOL_MS } });
     const l = []; for (const p of this.players.values()) l.push(this.profileRow(p));
     if (l.length) this.send(c, { t: 'prof', l });
     this.send(c, { t: 'fame', day: this.fame.day, top: this.fame.top() });
@@ -534,6 +564,7 @@ class Game {
         return;
       }
       case 'taps': return this.taps(c, m);
+      case 'dash': return this.dash(c);
       case 'open': return this.open(c, m);
       case 'fameOpen': return this.fameOpen(c, m);
       case 'chat': return this.chat(c, m);
@@ -680,7 +711,7 @@ class Game {
       o = buf.writeUInt16LE(s.id, o); o = buf.writeUInt16LE(s.members.length, o);
       o = buf.writeUInt16LE(Math.min(65535, Math.ceil(left / 10)), o);
       // flags: 1 = speed boost (bolt or steal burst), 2 = can't be stolen from/bumped right now, 4 = safe from the boss right now
-      o = buf.writeUInt8((this.now < s.boostUntil || this.now < (s.dashUntil || 0) ? 1 : 0) | (this.now < s.grace ? 2 : 0) | (this.now < (s.bossGrace || 0) ? 4 : 0), o); o = buf.writeUInt8(s.turn, o);
+      o = buf.writeUInt8((this.now < s.boostUntil || this.now < (s.dashUntil || 0) || this.now < (s.miniUntil || 0) ? 1 : 0) | (this.now < s.grace ? 2 : 0) | (this.now < (s.bossGrace || 0) ? 4 : 0), o); o = buf.writeUInt8(s.turn, o);
       const a = Math.atan2(Math.sin(s.members[0].angle), Math.cos(s.members[0].angle));
       o = buf.writeInt16LE(Math.round(a * 5000), o);
       for (const p of s.members) { o = buf.writeInt16LE(i16(p.x), o); o = buf.writeInt16LE(i16(p.y), o); o = buf.writeUInt32LE(p.pid, o); }

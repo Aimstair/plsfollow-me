@@ -2,7 +2,7 @@
   'use strict';
   // ---------- Constants ----------
   const TAU = Math.PI * 2, R = 17, HEAD_R = 21, TICK_MS = 50, MAX_EXTRAP_MS = 120;
-  let LEAD_MS = 30000, RACE_MS = 10000, BOOT = '';
+  let LEAD_MS = 30000, RACE_MS = 10000, BOOT = '', BREAK_TAPS = 100, DASH_COOL_MS = 1000;
   // Donation link for the main-screen button. Leave empty to hide the button.
   const DONATE_URL = 'https://buymeacoffee.com/aimstair';
   const PLAT = { ig: 'Instagram', tt: 'TikTok', x: 'X', th: 'Threads', yt: 'YouTube', tw: 'Twitch' };
@@ -209,7 +209,7 @@
 
   function onJson(m) {
     switch (m.t) {
-      case 'hello': BOOT = m.boot; LEAD_MS = m.cfg.LEAD_MS; RACE_MS = m.cfg.RACE_MS; profiles.clear(); cache.clear(); break;
+      case 'hello': BOOT = m.boot; LEAD_MS = m.cfg.LEAD_MS; RACE_MS = m.cfg.RACE_MS; BREAK_TAPS = m.cfg.BREAK_TAPS || BREAK_TAPS; DASH_COOL_MS = m.cfg.DASH_COOL_MS || DASH_COOL_MS; profiles.clear(); cache.clear(); break;
       case 'prof': m.l.forEach(setProfile); break;
       case 'bye': profiles.delete(m.pid); bubbles.delete(m.pid); break;
       case 'fame': renderFame(m.top); break;
@@ -250,6 +250,14 @@
     if (e.k === 'boost') {
       burst(e.x, e.y, 26, ['#7dd3fc', '#e0f7ff', '#38bdf8'], { speed: 300, life: 600, size: 4 });
       if (e.sid === me0.sid && me0.idx === 0) { toast('⚡ Speed boost! Go steal someone.', true); shake.a = 6; sfx('boost'); }
+    } else if (e.k === 'dash') {
+      burst(e.x, e.y, 12, ['#7dd3fc', '#e0f7ff'], { speed: 220, life: 380, size: 3 });
+      if (e.pid === myPid) { sfx('dash'); shake.a = Math.max(shake.a, 3); } else sfxAt('dash', e.x, e.y);
+    } else if (e.k === 'free') {
+      burst(e.x, e.y, 30, ['#ffc93c', '#fff', '#7dd3fc'], { speed: 320, life: 700, size: 5 });
+      if (e.pid === myPid) { sfx('free'); shake.a = 10; free = { sid: e.sid, n: 0 }; toast('🔓 You broke free! Grab a tail of your own.', true); }
+      else if (e.from === me0.sid) { sfxAt('free', e.x, e.y); toast(`🔓 ${name(e.pid)} tapped ${BREAK_TAPS} times and broke free`); }
+      else sfxAt('poof', e.x, e.y);
     } else if (e.k === 'bite') {
       burst(e.x, e.y, 30, ['#ffffff', '#cfe8ff', '#ffc93c'], { speed: 340, life: 700, size: 5 });
       if (e.sid !== me0.sid) sfxAt('chomp', e.x, e.y);
@@ -348,6 +356,7 @@
   cv.addEventListener('pointerdown', e => {
     pointer = { x: e.clientX, y: e.clientY };
     if (!mine || myIdx !== 0) peekAt(e.clientX, e.clientY);
+    else if (e.pointerType === 'mouse') doDash(); // fingers steer by touching, so on phones the side button dashes
   });
   const typing = e => e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT');
   addEventListener('keydown', e => {
@@ -360,6 +369,7 @@
       if (e.key === 'Escape') { stopSpectate(true); return; }
     }
     if (race && !$('duel').hidden && e.key === ' ') { e.preventDefault(); if (!e.repeat) padPress(); return; } // space taps; Enter is for chat
+    if (e.key === ' ' && mine && myIdx === 0) { e.preventDefault(); if (!e.repeat) doDash(); return; } // space dashes while you lead
     if (e.key === 'Enter' && myPid && $('intro').hidden && $('shareModal').hidden) { e.preventDefault(); openChat(); }
   });
   addEventListener('keyup', e => { keys[e.key] = false; });
@@ -399,6 +409,7 @@
   function padPress(x, y) {
     if (!race) return;
     race.count++; race.unsent++;
+    if (free.sid === race.sid) free.n = Math.min(BREAK_TAPS - 1, free.n + 1);
     if (window.PFAudio) PFAudio.tap(race.count);
     myEntry = { sid: race.sid };
     hudAt = 0; // refresh the status line right away
@@ -421,6 +432,7 @@
   }
   function onRaceBoard(m) {
     raceTop = m;
+    if (typeof m.free === 'number' && mine && m.sid === mine.id) { if (free.sid !== m.sid) free = { sid: m.sid, n: 0 }; free.n = Math.max(free.n, m.free); }
     if (typeof m.mine === 'number') stats.best = Math.max(stats.best, m.mine);
     if (!race || keyOf(m.sid, m.turn) !== race.key) return;
     const first = m.top[0], amFirst = first && first[0] === myPid;
@@ -429,6 +441,43 @@
   }
   function onTapResult() {}
   function closeRace() { flushTaps(); clearInterval(tapTimer); $('duel').hidden = true; race = null; }
+
+  // ---------- Side skill button ----------
+  // While you lead: Dash (click, Space, or the button), then a short cooldown that refills the ring.
+  // While you're in a tail: the ring fills toward BREAK_TAPS taps; reaching it breaks you free.
+  // The break-free count is per snake: getting stolen or moved to another tail starts it over.
+  let dashReadyAt = 0, free = { sid: 0, n: 0 }, skillMode = '';
+  function doDash() {
+    if (!mine || myIdx !== 0) return;
+    const b = $('skill');
+    if (now < dashReadyAt) { b.classList.remove('pop'); void b.offsetWidth; b.classList.add('pop'); return; }
+    send({ t: 'dash' }); dashReadyAt = now + DASH_COOL_MS;
+    b.classList.remove('pop'); void b.offsetWidth; b.classList.add('pop');
+  }
+  $('skill').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); doDash(); });
+  function skillTick() {
+    const b = $('skill'), lead = mine && myIdx === 0, tail = mine && myIdx > 0 && race;
+    if (mine && free.sid !== mine.id) free = { sid: mine.id, n: 0 };
+    const mode = lead ? 'dash' : tail ? 'free' : '';
+    if (mode !== skillMode) {
+      skillMode = mode; b.hidden = !mode; b.className = 'glass ' + mode;
+      $('skillIco').textContent = mode === 'free' ? '🔓' : '💨';
+      b.setAttribute('aria-label', mode === 'free' ? `Break free: tap ${BREAK_TAPS} times` : 'Dash');
+      b.title = mode === 'free' ? `Tap ${BREAK_TAPS} times in this snake to break free` : 'Dash (click or Space)';
+    }
+    if (!mode) return;
+    let k;
+    if (mode === 'dash') {
+      const left = Math.max(0, dashReadyAt - now); k = 1 - left / DASH_COOL_MS;
+      b.classList.toggle('ready', !left); b.classList.toggle('cool', !!left);
+      $('skillTxt').textContent = left ? (left / 1000).toFixed(1) + 's' : 'Dash';
+    } else {
+      k = free.n / BREAK_TAPS;
+      b.classList.toggle('near', k >= .8);
+      $('skillTxt').textContent = `${free.n}/${BREAK_TAPS}`;
+    }
+    $('skillArc').style.strokeDashoffset = (100 * (1 - k)).toFixed(1);
+  }
 
   // ---------- Peek + follow ----------
   let peekFor = 0, peekTimer = 0;
@@ -1483,7 +1532,7 @@
       ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.fillStyle = '#070d18'; ctx.fillRect(0, 0, W, H);
     }
     stepParts(dt);
-    hud();
+    hud(); skillTick();
     requestAnimationFrame(frame);
   }
   // Music and sound toggles (remembered per browser)

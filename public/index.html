@@ -176,6 +176,24 @@ canvas#game { position: fixed; inset: 0; display: block; width: 100%; height: 10
 .chip { font: inherit; background: rgba(255,255,255,.07); color: var(--ink); font-weight: 700; font-size: 12px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; cursor: pointer; }
 .chip:hover { background: rgba(255,255,255,.14); }
 #mini { bottom: calc(16px + env(safe-area-inset-bottom, 0px)); right: 16px; width: 140px; height: 140px; border-radius: 50%; padding: 0; }
+/* Side skill button: Dash (with its cooldown) while you lead, break-free progress while you're in a tail */
+#skill { position: fixed; z-index: 8; right: 16px; bottom: calc(172px + env(safe-area-inset-bottom, 0px)); width: 74px; height: 74px; border-radius: 50%; padding: 0; display: grid; place-items: center; color: var(--ink); cursor: pointer; touch-action: none; -webkit-tap-highlight-color: transparent; }
+#skill svg { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+#skill circle { fill: none; stroke-width: 5; }
+#skill .trk { stroke: rgba(160,190,220,.16); }
+#skill .arc { stroke: #7dd3fc; stroke-linecap: round; stroke-dasharray: 100; stroke-dashoffset: 100; }
+#skill .ico { font-size: 26px; line-height: 1; margin-top: -10px; }
+#skill small { position: absolute; bottom: 13px; left: 0; right: 0; text-align: center; font: 800 10.5px var(--body); letter-spacing: .02em; color: var(--muted); font-variant-numeric: tabular-nums; }
+#skill.ready { border-color: rgba(125,211,252,.7); box-shadow: 0 0 0 0 rgba(125,211,252,.55), 0 10px 30px rgba(0,0,0,.35); animation: skillReady 1.6s ease-in-out infinite; }
+#skill.ready small { color: #7dd3fc; }
+#skill.cool .ico { opacity: .45; }
+#skill.pop { animation: skillPop .25s ease-out; }
+#skill.free { pointer-events: none; }
+#skill.free .arc { stroke: var(--crown); }
+#skill.free.near { border-color: rgba(255,201,60,.7); }
+@keyframes skillReady { 50% { box-shadow: 0 0 0 7px rgba(125,211,252,0), 0 10px 30px rgba(0,0,0,.35); } }
+@keyframes skillPop { 0% { transform: scale(.86); } 60% { transform: scale(1.08); } 100% { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { #skill.ready, #skill.pop { animation: none; } }
 
 button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid var(--crown); outline-offset: 2px; }
 
@@ -273,6 +291,8 @@ select option { color: #0b1220; background: #fff; }
 @media (max-width: 640px) {
   #board, #brand { display: none; }
   #mini { width: 86px; height: 86px; bottom: auto; top: calc(132px + env(safe-area-inset-top, 0px)); right: 12px; }
+  #skill { width: 66px; height: 66px; right: 12px; bottom: calc(var(--bottom-h, 0px) + 28px + env(safe-area-inset-bottom, 0px)); }
+  #skill .ico { font-size: 23px; } #skill small { bottom: 11px; font-size: 10px; }
   #mock { bottom: auto; top: calc(104px + env(safe-area-inset-top, 0px)); left: 12px; max-width: calc(100% - 120px); padding: 8px; }
   #mock .label { display: none; }
   #toasts { top: calc(100px + env(safe-area-inset-top, 0px)); }
@@ -291,6 +311,8 @@ select option { color: #0b1220; background: #fff; }
   #bottom { zoom: .6; width: min(480px, 70vw); bottom: calc(8px + env(safe-area-inset-bottom, 0px)); }
   #raceList { display: none; }
   #mini { width: 84px; height: 84px; top: calc(8px + env(safe-area-inset-top, 0px)); bottom: auto; right: calc(8px + env(safe-area-inset-right, 0px)); }
+  #skill { width: 62px; height: 62px; right: calc(10px + env(safe-area-inset-right, 0px)); bottom: calc(10px + env(safe-area-inset-bottom, 0px)); }
+  #skill .ico { font-size: 21px; } #skill small { bottom: 10px; font-size: 9.5px; }
   #audioCtl, #audioCtl.ingame { zoom: .8; top: calc(8px + env(safe-area-inset-top, 0px)); left: calc(8px + env(safe-area-inset-left, 0px)); flex-direction: row; }
   #donate, #donate.ingame { width: 38px; padding: 0; justify-content: center; font-size: 17px; left: calc(8px + env(safe-area-inset-left, 0px)); bottom: calc(8px + env(safe-area-inset-bottom, 0px)); }
   #donate .dl { display: none; }
@@ -512,6 +534,7 @@ select option { color: #0b1220; background: #fff; }
 </div>
 
 
+<button id="skill" class="glass" hidden aria-label="Dash"><svg viewBox="0 0 64 64" aria-hidden="true"><circle class="trk" cx="32" cy="32" r="28"/><circle class="arc" id="skillArc" cx="32" cy="32" r="28" pathLength="100"/></svg><span class="ico" id="skillIco">💨</span><small id="skillTxt">Dash</small></button>
 <canvas class="hud glass" id="mini" width="280" height="280" aria-label="Minimap"></canvas>
 
 <div id="audioCtl" role="group" aria-label="Sound, chat and support">

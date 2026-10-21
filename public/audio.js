@@ -415,6 +415,8 @@ window.PFAudio = (() => {
     ready: t => tone(mtof(69), t, { type: 'sine', dur: 0.15, gain: 0.18 }),
     go: t => { tone(mtof(81), t, { type: 'square', dur: 0.22, gain: 0.12, filter: 3000 }); tone(mtof(88), t, { type: 'sine', dur: 0.3, gain: 0.15 }); },
     tap: t => tone(1400, t, { type: 'triangle', dur: 0.06, gain: 0.2, verb: 0 }),
+    dash: t => { whoosh(t, 900, 3200, 0.2, 0.22); tone(520, t, { type: 'sine', dur: 0.14, gain: 0.12, to: 1150 }); },
+    free: t => { whoosh(t, 300, 2600, 0.3, 0.25); [72, 79, 84].forEach((n, i) => tone(mtof(n), t + 0.05 + i * 0.06, { type: 'triangle', dur: 0.3, gain: 0.18, verb: 0.3 })); },
     win: t => [79, 83, 86, 91].forEach((n, i) => tone(mtof(n), t + i * 0.06, { dur: 0.5, gain: 0.16, verb: 0.4 })),
     miss: t => { tone(mtof(64), t, { type: 'triangle', dur: 0.18, gain: 0.2 }); tone(mtof(60), t + 0.12, { type: 'triangle', dur: 0.3, gain: 0.2 }); },
     gain: t => [67, 71, 74, 79].forEach((n, i) => tone(mtof(n), t + i * 0.05, { type: 'triangle', dur: 0.2, gain: 0.18 })),
