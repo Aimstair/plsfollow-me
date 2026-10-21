@@ -268,6 +268,24 @@ class House {
     if (g.boss.phase === 'warning' && Math.hypot(h.x, h.y) < 480) want = Math.atan2(h.y, h.x); // clear the landing zone
     const safe = g.boss.present ? g.boss.safeHeading(h, want, speed) : null;
     h.target = safe !== null ? safe : want;
+    this.aceDash(s, h, a, safe !== null && Math.abs(Math.atan2(Math.sin(safe - want), Math.cos(safe - want))) > 0.4);
+  }
+
+  // The ace uses the mini dash like a sharp player: to close the last stretch on a tail it's lined up
+  // on, and to get out of a boss attack or away from a bigger head bearing down on it
+  aceDash(s, h, aim, dodging) {
+    const g = this.g;
+    if (g.now < (s.miniReady || 0)) return;
+    const facing = (x, y) => { const d = Math.atan2(y - h.y, x - h.x) - h.angle; return Math.abs(Math.atan2(Math.sin(d), Math.cos(d))); };
+    if (g.trolls.some(t => Math.hypot(t.x - h.x, t.y - h.y) < 200 && facing(t.x, t.y) < 0.6)) return; // never dash into a troll
+    let go = dodging;
+    if (!go && h.mind.mode === 'hunt' && aim) { const d = Math.hypot(aim.x - h.x, aim.y - h.y); go = d > 60 && d < 280 && facing(aim.x, aim.y) < 0.3; }
+    if (!go) for (const o of g.snakes) {
+      if (o === s || o.members.length < s.members.length) continue;
+      const oh = o.members[0];
+      if (Math.hypot(oh.x - h.x, oh.y - h.y) < 160 && facing(oh.x, oh.y) > 2) { go = true; break; } // a bigger head right behind: get away
+    }
+    if (go && Math.random() < 0.5) g.headDash(s); // not at every chance, so it doesn't look scripted
   }
 
   acePlan(s, h) {

@@ -20,8 +20,9 @@ right away, and produce moments worth screenshotting and sharing.
 | AFK | A head that sends no input for 1s goes on autopilot (wanders, avoids walls). After 8s idle, leadership passes to the next active human. |
 | Self-bite | If the head touches its own body (segment ≥ 10), the snake splits. Everything behind the bite becomes a new snake, and the bitten segment becomes its head. |
 | Steal | If a head touches another snake's body at segment k, everything from k to the tail is taken and attached to the attacker's tail. |
+| Lone-head boost refill | A head with no tail that grabs a ⚡ boost also gets its 30-second timer back to full. Heads with a tail just get the speed. |
 | Steal burst & shields | A steal gives the thief a 1.5s speed burst (×1.35). Any snake that can't be hurt right now (just stole, just got robbed, bumped, hit by a troll or the boss, or just formed) shows a shield: a dashed bubble on the head and a thin outline on the body. Silver = safe from other snakes and trolls; cyan = safe from the boss only. |
-| Dash & break free | The head clicks (or presses Space, or the side button on phones) for a mini dash: ×1.9 for 0.35s, then a 1s cooldown shown on the round side button. Someone in a tail who taps 100 times in the same snake breaks free and leads alone; the count starts over if they get stolen or end up in another tail. Bots don't break free. |
+| Dash & break free | The head clicks (or presses Space, or the side button on phones) for a mini dash: ×1.9 for 0.35s, then a 1s cooldown shown on the round side button. Someone in a tail who taps 100 times breaks free and leads alone; the count stays with them when they're stolen or moved to another tail (the race count for the next head doesn't). Bots don't break free; ericmar.g dashes to close on a tail or escape the boss and bigger heads. |
 | Head-on | The bigger snake captures the other head. Two heads with no tails instead bump: both lose 5s and bounce apart. |
 | No tail | A head with no tail has 30s to get one (steal from a body, or get captured into a bigger snake). The clock pauses while nobody else is in the arena. Out of time: game over, unless another player bumped you since you went solo, in which case you join that player's tail. |
 | Grace | A snake that just split or stole cannot collide for 1–1.5s. This prevents chain reactions. |
@@ -239,7 +240,7 @@ Music: D harmonic minor, 138 → 152 BPM: choir, timpani, brass stabs, bells.
 
 **Cycle:** first landing ~60s after the server starts → **8s warning** (siren, growing shadow at the center)
 → **lands** (Slam) → **2 minutes** on the map (attacks every 4–6s; last 30s **enraged**: every 2–3s, red eye,
-Doomscroll unlocked) → leaves → **3-minute cooldown** → next warning.
+Doomscroll unlocked) → leaves → **1-minute cooldown** → next warning.
 
 **Every attack is telegraphed** with a red outline 1–1.5s before it does damage.
 

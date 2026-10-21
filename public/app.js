@@ -214,7 +214,7 @@
       case 'bye': profiles.delete(m.pid); bubbles.delete(m.pid); break;
       case 'fame': renderFame(m.top); break;
       case 'chat': onChat(m); break;
-      case 'you': myPid = m.pid; onJoined(); break;
+      case 'you': myPid = m.pid; free = { n: 0 }; onJoined(); break;
       case 'out': knockedOut(m.why); break;
       case 'err': joinInfo = null; $('intro').hidden = false; $('bottom').hidden = true; $('joinErr').textContent = m.msg; $('joinErr').hidden = false; $('joinBtn').disabled = false; break;
       case 'sync': {
@@ -249,13 +249,13 @@
     const me0 = latestPlace();
     if (e.k === 'boost') {
       burst(e.x, e.y, 26, ['#7dd3fc', '#e0f7ff', '#38bdf8'], { speed: 300, life: 600, size: 4 });
-      if (e.sid === me0.sid && me0.idx === 0) { toast('⚡ Speed boost! Go steal someone.', true); shake.a = 6; sfx('boost'); }
+      if (e.sid === me0.sid && me0.idx === 0) { toast(e.refill ? '⚡ Speed boost, and your timer is back to 0:30!' : '⚡ Speed boost! Go steal someone.', true); shake.a = 6; sfx('boost'); }
     } else if (e.k === 'dash') {
       burst(e.x, e.y, 12, ['#7dd3fc', '#e0f7ff'], { speed: 220, life: 380, size: 3 });
       if (e.pid === myPid) { sfx('dash'); shake.a = Math.max(shake.a, 3); } else sfxAt('dash', e.x, e.y);
     } else if (e.k === 'free') {
       burst(e.x, e.y, 30, ['#ffc93c', '#fff', '#7dd3fc'], { speed: 320, life: 700, size: 5 });
-      if (e.pid === myPid) { sfx('free'); shake.a = 10; free = { sid: e.sid, n: 0 }; toast('🔓 You broke free! Grab a tail of your own.', true); }
+      if (e.pid === myPid) { sfx('free'); shake.a = 10; free = { n: 0 }; toast('🔓 You broke free! Grab a tail of your own.', true); }
       else if (e.from === me0.sid) { sfxAt('free', e.x, e.y); toast(`🔓 ${name(e.pid)} tapped ${BREAK_TAPS} times and broke free`); }
       else sfxAt('poof', e.x, e.y);
     } else if (e.k === 'bite') {
@@ -409,7 +409,7 @@
   function padPress(x, y) {
     if (!race) return;
     race.count++; race.unsent++;
-    if (free.sid === race.sid) free.n = Math.min(BREAK_TAPS - 1, free.n + 1);
+    free.n = Math.min(BREAK_TAPS - 1, free.n + 1);
     if (window.PFAudio) PFAudio.tap(race.count);
     myEntry = { sid: race.sid };
     hudAt = 0; // refresh the status line right away
@@ -432,7 +432,7 @@
   }
   function onRaceBoard(m) {
     raceTop = m;
-    if (typeof m.free === 'number' && mine && m.sid === mine.id) { if (free.sid !== m.sid) free = { sid: m.sid, n: 0 }; free.n = Math.max(free.n, m.free); }
+    if (typeof m.free === 'number') free.n = Math.max(free.n, m.free);
     if (typeof m.mine === 'number') stats.best = Math.max(stats.best, m.mine);
     if (!race || keyOf(m.sid, m.turn) !== race.key) return;
     const first = m.top[0], amFirst = first && first[0] === myPid;
@@ -445,8 +445,8 @@
   // ---------- Side skill button ----------
   // While you lead: Dash (click, Space, or the button), then a short cooldown that refills the ring.
   // While you're in a tail: the ring fills toward BREAK_TAPS taps; reaching it breaks you free.
-  // The break-free count is per snake: getting stolen or moved to another tail starts it over.
-  let dashReadyAt = 0, free = { sid: 0, n: 0 }, skillMode = '';
+  // The break-free count stays with you when you're stolen or moved to another tail (the race count doesn't).
+  let dashReadyAt = 0, free = { n: 0 }, skillMode = '';
   function doDash() {
     if (!mine || myIdx !== 0) return;
     const b = $('skill');
@@ -457,13 +457,12 @@
   $('skill').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); doDash(); });
   function skillTick() {
     const b = $('skill'), lead = mine && myIdx === 0, tail = mine && myIdx > 0 && race;
-    if (mine && free.sid !== mine.id) free = { sid: mine.id, n: 0 };
     const mode = lead ? 'dash' : tail ? 'free' : '';
     if (mode !== skillMode) {
       skillMode = mode; b.hidden = !mode; b.className = 'glass ' + mode;
       $('skillIco').textContent = mode === 'free' ? '🔓' : '💨';
       b.setAttribute('aria-label', mode === 'free' ? `Break free: tap ${BREAK_TAPS} times` : 'Dash');
-      b.title = mode === 'free' ? `Tap ${BREAK_TAPS} times in this snake to break free` : 'Dash (click or Space)';
+      b.title = mode === 'free' ? `Tap ${BREAK_TAPS} times to break free` : 'Dash (click or Space)';
     }
     if (!mode) return;
     let k;

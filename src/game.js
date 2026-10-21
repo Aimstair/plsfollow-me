@@ -19,7 +19,7 @@ const CFG = {
   BOOST_MS: 3000, BOOST: 1.6, BOLT_HIT: 32,
   STEAL_BOOST_MS: 1500, STEAL_BOOST: 1.35, // a short burst of speed after stealing a tail
   HEAD_DASH_MS: 350, HEAD_DASH: 1.9, HEAD_DASH_COOL_MS: 1000, // the head clicks for a mini dash, once a second
-  BREAK_TAPS: 100, // a player in a tail who taps this many times (in the same snake) breaks free and leads alone
+  BREAK_TAPS: 100, // a player in a tail who taps this many times breaks free and leads alone (the count follows them from snake to snake)
   // Ten trolls wander the map at random, keeping apart. Head bump: the leader loses time.
   // Body hit: the snake breaks. A head with no tail gets knocked out.
   TROLL_COUNT: 20, TROLL_APART: 0.28, // keep at least this fraction of the arena radius between trolls
@@ -369,7 +369,10 @@ class Game {
     for (let i = 0; i < this.bolts.length; i++) {
       const b = this.bolts[i];
       if (Math.abs(b.x - h.x) < CFG.BOLT_HIT && Math.abs(b.y - h.y) < CFG.BOLT_HIT && Math.hypot(b.x - h.x, b.y - h.y) < CFG.BOLT_HIT) {
-        this.event({ k: 'boost', sid: s.id, x: Math.round(b.x), y: Math.round(b.y) });
+        // A head with no tail also gets its full 30 seconds back; a head with a tail just gets the speed
+        const refill = s.members.length === 1;
+        if (refill) s.leaderSince = this.now;
+        this.event({ k: 'boost', sid: s.id, refill, x: Math.round(b.x), y: Math.round(b.y) });
         s.boostUntil = this.now + CFG.BOOST_MS; this.bolts[i] = this.spawnBolt();
       }
     }
@@ -453,10 +456,10 @@ class Game {
     const add = Math.min(n, Math.floor(e.budget));
     if (add <= 0) return;
     e.budget -= add; e.n += add; e.at = this.now; r.dirty = true;
-    // Break-free counter: people (not bots) who keep tapping in the same snake eventually escape it
+    // Break-free counter: people (not bots) who keep tapping eventually escape. Unlike the race count it
+    // isn't tied to a snake, so getting stolen or moved to another tail keeps it
     if (p.bot) return;
-    if (p.freeSid !== s.id) { p.freeSid = s.id; p.freeN = 0; }
-    p.freeN += add;
+    p.freeN = (p.freeN || 0) + add;
     if (p.freeN >= CFG.BREAK_TAPS) this.breakFree(p, s);
   }
 
@@ -469,7 +472,7 @@ class Game {
     p.angle = p.target = Math.atan2(p.y - prev.y, p.x - prev.x) + rand(-0.5, 0.5);
     p.lastSteer = this.now;
     const ns = this.makeSnake([p]);
-    p.freeSid = ns.id; p.freeN = 0;
+    p.freeN = 0;
     this.event({ k: 'free', pid: p.pid, from: s.id, sid: ns.id, x: Math.round(p.x), y: Math.round(p.y) });
   }
 
@@ -477,9 +480,14 @@ class Game {
   dash(c) {
     const p = c.player; if (!p) return;
     const s = this.snakeOf(p);
-    if (!s || s.members[0] !== p || this.now < (s.miniReady || 0)) return;
+    if (s && s.members[0] === p) this.headDash(s);
+  }
+  headDash(s) {
+    if (this.now < (s.miniReady || 0)) return false;
+    const p = s.members[0];
     s.miniUntil = this.now + CFG.HEAD_DASH_MS; s.miniReady = this.now + CFG.HEAD_DASH_COOL_MS;
     this.event({ k: 'dash', sid: s.id, pid: p.pid, x: Math.round(p.x), y: Math.round(p.y) });
+    return true;
   }
 
   flushRaceBoards() {
@@ -490,7 +498,7 @@ class Game {
       for (const p of s.members) if (p.client) {
         // each racer also learns their own count as the server sees it
         const e = r.entries.get(p.pid);
-        this.sendRaw(p.client, e ? msg.slice(0, -1) + `,"mine":${e.n},"free":${p.freeSid === s.id ? p.freeN || 0 : 0}}` : msg);
+        this.sendRaw(p.client, e ? msg.slice(0, -1) + `,"mine":${e.n},"free":${p.freeN || 0}}` : msg);
       }
     }
   }
